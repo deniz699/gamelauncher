@@ -26,11 +26,12 @@ object WidgetGfx {
         val bg = paint().apply { color = st.bgWithAlpha }
         c.drawRoundRect(RectF(0f, 0f, w, h), h / 2f, h / 2f, bg)
 
-        val r = minOf(h * 0.38f, w * 0.17f)
-        // Yayın alt uçları merkezden aşağıda kalır; görünür kutuyu dikeyde ortala
-        val cy = h / 2f + r * 0.19f
-        gauge(c, w * 0.27f, cy, r, battery, 20f, 50f, phoneIcon = true, st = st)
-        gauge(c, w * 0.73f, cy, r, cpu, 30f, 90f, phoneIcon = false, st = st)
+        // Gösterge + altındaki etiket birlikte ~2.3 r yüksekliğinde; pill'in içine sığacak şekilde ortalanır
+        val pad = h * 0.09f
+        val r = minOf((h - 2 * pad) / 2.3f, w * 0.17f)
+        val cy = (h - 2.3f * r) / 2f + 1.13f * r
+        gauge(c, w * 0.27f, cy, r, battery, 20f, 50f, phoneIcon = true, label = "Pil", st = st)
+        gauge(c, w * 0.73f, cy, r, cpu, 30f, 90f, phoneIcon = false, label = "CPU", st = st)
         return bmp
     }
 
@@ -42,7 +43,7 @@ object WidgetGfx {
 
     private fun gauge(
         c: Canvas, cx: Float, cy: Float, r: Float,
-        value: Float?, min: Float, max: Float, phoneIcon: Boolean, st: WStyle
+        value: Float?, min: Float, max: Float, phoneIcon: Boolean, label: String, st: WStyle
     ) {
         val stroke = r * 0.26f
         val rect = RectF(cx - r, cy - r, cx + r, cy + r)
@@ -96,8 +97,169 @@ object WidgetGfx {
         }
         val txt = if (value != null) "${value.roundToInt()}°" else "—"
         val fm = tp.fontMetrics
-        val ty = cy + r * 0.56f - (fm.ascent + fm.descent) / 2f
+        val ty = cy + r * 0.45f - (fm.ascent + fm.descent) / 2f
         c.drawText(txt, cx, ty, tp)
+
+        // Etiket (göstergenin altında)
+        val lp = paint().apply {
+            color = st.textDim
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT
+            textSize = r * 0.40f
+        }
+        val lfm = lp.fontMetrics
+        c.drawText(label, cx, cy + r * 0.95f - (lfm.ascent + lfm.descent) / 2f, lp)
+    }
+
+
+    // ---------------------------------------------------------- Telefon özeti (boyuta uyum sağlayan)
+
+    data class InfoData(
+        val model: String, val sys: String,
+        val ramUsed: Long, val ramTotal: Long,
+        val stoUsed: Long, val stoTotal: Long,
+        val battery: Float?, val cpu: Float?
+    )
+
+    private fun fitText(text: String, p: android.text.TextPaint, maxW: Float): String =
+        android.text.TextUtils.ellipsize(text, p, maxW.coerceAtLeast(1f), android.text.TextUtils.TruncateAt.END).toString()
+
+    /**
+     * Tüm içerik dp biriminde çizilir. Yükseklik azaldıkça önce satırlar (sıcaklık, sistem bilgisi,
+     * model adı) sırayla gizlenir; en küçük boyutta RAM ve Depolama yan yana gelir.
+     * Hiçbir boyutta içerik taşmaz / kesilmez.
+     */
+    fun infoBitmap(wDp: Float, hDp: Float, scale: Float, st: WStyle, d: InfoData): Bitmap {
+        val bmp = Bitmap.createBitmap(
+            (wDp * scale).toInt().coerceAtLeast(40), (hDp * scale).toInt().coerceAtLeast(20), Bitmap.Config.ARGB_8888
+        )
+        val c = Canvas(bmp)
+        c.scale(bmp.width / wDp, bmp.height / hDp)
+
+        val radius = minOf(22f, hDp / 2f)
+        c.drawRoundRect(RectF(0f, 0f, wDp, hDp), radius, radius, paint().apply { color = st.bgWithAlpha })
+        c.drawRoundRect(
+            RectF(0.5f, 0.5f, wDp - 0.5f, hDp - 0.5f), radius, radius,
+            paint().apply { style = Paint.Style.STROKE; strokeWidth = 1f; color = 0x22FFFFFF }
+        )
+
+        // Dikey yükler (dp)
+        val barH = 7f
+        val rowH = 14f          // etiket satırı
+        val gapBar = 4f
+        val modelH = 19f
+        val sysH = 14f
+        val tempH = 17f
+        val gap = 9f
+
+        val showTemp: Boolean
+        val showSys: Boolean
+        val showModel: Boolean
+        val sideBySide: Boolean
+        val pad: Float
+
+        fun need(model: Boolean, sys: Boolean, temp: Boolean, pd: Float): Float {
+            var n = pd * 2
+            if (model) n += modelH
+            if (sys) n += sysH
+            if (model || sys) n += gap
+            n += rowH + gapBar + barH          // RAM
+            n += gap + rowH + gapBar + barH    // Depolama
+            if (temp) n += gap + tempH
+            return n
+        }
+
+        // (model, sys, temp, kenar boşluğu)
+        val tiers = listOf(
+            floatArrayOf(1f, 1f, 1f, 14f),
+            floatArrayOf(1f, 1f, 0f, 14f),
+            floatArrayOf(1f, 0f, 0f, 12f),
+            floatArrayOf(1f, 0f, 0f, 8f),
+            floatArrayOf(0f, 0f, 0f, 10f)
+        )
+        var chosen: BooleanArray? = null
+        var pd = 14f
+        for (t in tiers) {
+            if (need(t[0] > 0, t[1] > 0, t[2] > 0, t[3]) <= hDp) {
+                chosen = booleanArrayOf(t[0] > 0, t[1] > 0, t[2] > 0); pd = t[3]; break
+            }
+        }
+        if (chosen == null) {
+            // Dikeyde sığmıyor: RAM ve Depolama yan yana tek satır
+            chosen = booleanArrayOf(false, false, false)
+            sideBySide = true
+            pd = (hDp * 0.16f).coerceIn(4f, 10f)
+        } else sideBySide = false
+        showModel = chosen[0]; showSys = chosen[1]; showTemp = chosen[2]
+        pad = pd
+
+        val left = if (hDp < 60f) 12f else 14f
+        val right = wDp - left
+        val inner = right - left
+
+        val bold = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD }
+        val reg = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT }
+
+        fun text(t: String, x: Float, baseTop: Float, size: Float, p: android.text.TextPaint, col: Int, align: Paint.Align, maxW: Float) {
+            p.textSize = size; p.color = col; p.textAlign = align
+            val fm = p.fontMetrics
+            c.drawText(fitText(t, p, maxW), x, baseTop - fm.ascent, p)
+        }
+
+        fun bar(x: Float, y: Float, w: Float, f: Float) {
+            val p = paint()
+            p.color = st.textFaint
+            c.drawRoundRect(RectF(x, y, x + w, y + barH), barH / 2, barH / 2, p)
+            val ff = f.coerceIn(0f, 1f)
+            if (ff > 0f) {
+                p.color = st.accent
+                c.drawRoundRect(RectF(x, y, x + maxOf(w * ff, barH), y + barH), barH / 2, barH / 2, p)
+            }
+        }
+
+        fun metric(label: String, value: String, frac: Float, x: Float, y: Float, w: Float) {
+            // değer sağa yaslı; etiket solda, değere yer bırakarak
+            reg.textSize = 11f
+            val vw = reg.measureText(value)
+            text(value, x + w, y, 11f, reg, st.textDim, Paint.Align.RIGHT, w * 0.75f)
+            text(label, x, y, 11f, bold, st.text, Paint.Align.LEFT, (w - vw - 6f).coerceAtLeast(10f))
+            bar(x, y + rowH + gapBar - 2f, w, frac)
+        }
+
+        val ramF = d.ramUsed.toFloat() / d.ramTotal.coerceAtLeast(1)
+        val stoF = d.stoUsed.toFloat() / d.stoTotal.coerceAtLeast(1)
+
+        if (sideBySide) {
+            val colGap = 14f
+            val colW = (inner - colGap) / 2f
+            val blockH = rowH + gapBar + barH - 2f
+            val y = (hDp - blockH) / 2f
+            metric("RAM", "${gb(d.ramUsed)}", ramF, left, y, colW)
+            metric("Depolama", "${gb(d.stoUsed)}", stoF, left + colW + colGap, y, colW)
+            return bmp
+        }
+
+        // İçeriği dikeyde ortala
+        var y = (hDp - need(showModel, showSys, showTemp, pad)) / 2f + pad
+        if (showModel) {
+            text(d.model, left, y, 15f, bold, st.text, Paint.Align.LEFT, inner)
+            y += modelH
+        }
+        if (showSys) {
+            text(d.sys, left, y, 11f, reg, st.textDim, Paint.Align.LEFT, inner)
+            y += sysH
+        }
+        if (showModel || showSys) y += gap
+        metric("RAM", "${gb(d.ramUsed)} / ${gb(d.ramTotal)}", ramF, left, y, inner)
+        y += rowH + gapBar + barH + gap
+        metric("Depolama", "${gb(d.stoUsed)} / ${gb(d.stoTotal)}", stoF, left, y, inner)
+        y += rowH + gapBar + barH
+        if (showTemp) {
+            y += gap
+            fun t(v: Float?) = v?.let { String.format(java.util.Locale.US, "%.1f °C", it) } ?: "—"
+            text("Batarya ${t(d.battery)} • İşlemci ${t(d.cpu)}", left, y, 12f, bold, st.accent, Paint.Align.LEFT, inner)
+        }
+        return bmp
     }
 
     // ---------------------------------------------------------- Doluluk çubuğu

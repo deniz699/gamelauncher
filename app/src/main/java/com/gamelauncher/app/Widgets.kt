@@ -48,7 +48,11 @@ class TempWidget : AppWidgetProvider() {
 
 class InfoWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
-        ids.forEach { mgr.updateAppWidget(it, WidgetUi.info(context)) }
+        ids.forEach { mgr.updateAppWidget(it, WidgetUi.info(context, mgr, it)) }
+    }
+
+    override fun onAppWidgetOptionsChanged(context: Context, mgr: AppWidgetManager, id: Int, newOptions: Bundle) {
+        mgr.updateAppWidget(id, WidgetUi.info(context, mgr, id))
     }
 }
 
@@ -112,7 +116,7 @@ object WidgetUi {
             mgr.getAppWidgetIds(ComponentName(ctx, TempWidget::class.java))
                 .forEach { mgr.updateAppWidget(it, temps(ctx, mgr, it)) }
             mgr.getAppWidgetIds(ComponentName(ctx, InfoWidget::class.java))
-                .forEach { mgr.updateAppWidget(it, info(ctx)) }
+                .forEach { mgr.updateAppWidget(it, info(ctx, mgr, it)) }
         }
     }
 
@@ -203,12 +207,15 @@ object WidgetUi {
 
     // ---------------------------------------------------------- 2) Sıcaklıklar (Samsung tarzı hap)
 
+    private const val TEMP_PILL_MAX_DP = 68
+
     fun temps(ctx: Context, mgr: AppWidgetManager, id: Int): RemoteViews {
         val rv = RemoteViews(ctx.packageName, R.layout.widget_temps)
         val st = WidgetStyle.load(ctx)
         val (wd, hd) = sizeDp(ctx, mgr, id)
         val wDp = if (wd > 0) wd else 160
-        val hDp = if (hd > 0) hd else 72
+        // Pill en fazla 1 hücre kalınlığında (~68dp) çizilir; widget daha uzunsa dikeyde ortalanır
+        val hDp = if (hd > 0) minOf(hd, TEMP_PILL_MAX_DP) else 64
         val density = ctx.resources.displayMetrics.density
         // Bitmap çok büyümesin (RemoteViews sınırı): en fazla ~250 bin piksel
         val scale = min(density, sqrt(250_000f / (wDp * hDp)))
@@ -220,7 +227,7 @@ object WidgetUi {
 
     // ---------------------------------------------------------- 3) Telefon özeti (RAM / depolama çubukları)
 
-    fun info(ctx: Context): RemoteViews {
+    fun info(ctx: Context, mgr: AppWidgetManager, id: Int): RemoteViews {
         val rv = RemoteViews(ctx.packageName, R.layout.widget_info)
         val st = WidgetStyle.load(ctx)
         val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -229,25 +236,20 @@ object WidgetUi {
         val total = stat.blockCountLong * stat.blockSizeLong
         val free = stat.availableBlocksLong * stat.blockSizeLong
 
-        styleBg(rv, st)
-        rv.setTextViewText(R.id.iModel, "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}")
-        rv.setTextViewText(R.id.iSys, "Android ${Build.VERSION.RELEASE} • SDK ${Build.VERSION.SDK_INT}")
-        rv.setTextViewText(R.id.iTemp, "Batarya ${t(batteryTemp(ctx))} • İşlemci ${t(cpuTempC())}")
+        val data = WidgetGfx.InfoData(
+            model = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
+            sys = "Android ${Build.VERSION.RELEASE} • SDK ${Build.VERSION.SDK_INT}",
+            ramUsed = mi.totalMem - mi.availMem, ramTotal = mi.totalMem,
+            stoUsed = total - free, stoTotal = total,
+            battery = batteryTemp(ctx), cpu = cpuTempC()
+        )
 
-        val ramUsed = mi.totalMem - mi.availMem
-        val stoUsed = total - free
-        rv.setTextViewText(R.id.iRamV, "${gb(ramUsed)} / ${gb(mi.totalMem)}")
-        rv.setTextViewText(R.id.iStoV, "${gb(stoUsed)} / ${gb(total)}")
-        rv.setImageViewBitmap(R.id.iRamBar, WidgetGfx.barBitmap(ramUsed.toFloat() / mi.totalMem.coerceAtLeast(1), st))
-        rv.setImageViewBitmap(R.id.iStoBar, WidgetGfx.barBitmap(stoUsed.toFloat() / total.coerceAtLeast(1), st))
-
-        rv.setTextColor(R.id.iModel, st.text)
-        rv.setTextColor(R.id.iSys, st.textDim)
-        rv.setTextColor(R.id.iRamL, st.text)
-        rv.setTextColor(R.id.iStoL, st.text)
-        rv.setTextColor(R.id.iRamV, st.textDim)
-        rv.setTextColor(R.id.iStoV, st.textDim)
-        rv.setTextColor(R.id.iTemp, st.accent)
+        val (wd, hd) = sizeDp(ctx, mgr, id)
+        val wDp = if (wd > 0) wd else 280
+        val hDp = if (hd > 0) hd else 130
+        val density = ctx.resources.displayMetrics.density
+        val scale = min(density, sqrt(250_000f / (wDp * hDp)))
+        rv.setImageViewBitmap(R.id.img, WidgetGfx.infoBitmap(wDp.toFloat(), hDp.toFloat(), scale, st, data))
         rv.setOnClickPendingIntent(R.id.root, openApp(ctx))
         return rv
     }
