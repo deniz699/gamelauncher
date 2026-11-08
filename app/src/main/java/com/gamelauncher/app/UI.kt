@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.BitmapFactory
 import android.provider.Settings
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -81,6 +82,7 @@ fun App(s: AppState) {
     var showSettings by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var showDevice by remember { mutableStateOf(false) }
+    var statsGame by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<String?>(null) }
     val ctx = LocalContext.current
     // Geri: Favoriler/İstatistik'ten ana sayfaya döner, ana sayfadayken uygulamadan çıkar
@@ -174,7 +176,7 @@ fun App(s: AppState) {
                 when (page) {
                     0 -> GameGrid(s, s.sortedGames(), "Oyun bulunamadı. Telefondaki oyunlar otomatik eklenir.") { selected = it }
                     1 -> GameGrid(s, s.sortedGames().filter { it.favorite }, "Favori oyun yok. Kalbe dokunarak ekle.") { selected = it }
-                    else -> StatsTab(s)
+                    else -> StatsTab(s) { statsGame = it }
                 }
                 }
             }
@@ -200,6 +202,7 @@ fun App(s: AppState) {
         }
         if (showSettings) SettingsPage(s) { showSettings = false }
         if (showDevice) DevicePage { showDevice = false }
+        statsGame?.let { GameStatsPage(s, it) { statsGame = null } }
     }
 
     if (showAdd) AddSheet(s) { showAdd = false }
@@ -447,7 +450,7 @@ private fun InfoRow(label: String, value: String) {
 // ---------------------------------------------------------------- İstatistik
 
 @Composable
-fun StatsTab(s: AppState) {
+fun StatsTab(s: AppState, onGame: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f), contentColor = MaterialTheme.colorScheme.onSurface)) {
             Column(Modifier.padding(16.dp)) {
@@ -459,19 +462,18 @@ fun StatsTab(s: AppState) {
         Spacer(Modifier.height(16.dp))
         Text("En çok oynananlar", style = MaterialTheme.typography.titleMedium, color = onBgColor())
         s.games.sortedByDescending { playedMs(s.sessions, it.pkg, Range.ALL) }.forEach { g ->
-            Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f), contentColor = MaterialTheme.colorScheme.onSurface)) {
+            Card(onClick = { onGame(g.pkg) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f), contentColor = MaterialTheme.colorScheme.onSurface)) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Cover(g, Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)), 0.85f)
                     Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(g.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            listOf(Range.TODAY, Range.WEEK, Range.YEAR, Range.ALL)
-                                .joinToString("  •  ") { "${it.label}: ${fmtDur(playedMs(s.sessions, g.pkg, it))}" },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        g.name, Modifier.weight(1f),
+                        fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        fmtDur(playedMs(s.sessions, g.pkg, Range.ALL)),
+                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
@@ -485,6 +487,7 @@ fun StatsTab(s: AppState) {
 @Composable
 fun SettingsPage(s: AppState, onClose: () -> Unit) {
     val ctx = LocalContext.current
+    val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) s.setBackground(uri)
     }
@@ -540,6 +543,29 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Arka planı bulanıklaştır", Modifier.weight(1f))
                 FlatSwitch(checked = s.bgBlur, onCheckedChange = { s.changeBgBlur(it) })
+            }
+
+            Text("Oyun içi kenar paneli", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Kenar panelini aç")
+                    Text(
+                        "Oyundayken ekranın solunda küçük bir çizgi çıkar. Dokununca ya da sağa kaydırınca oyunlarına kısayollar açılır; kısayola dokunmak oyunu açılır pencerede (cihaz destekliyorsa) başlatır, uzun basmak normal açar. \"Diğer uygulamaların üzerinde göster\" ve kullanım erişimi izni gerekir; izni verip geri dönünce anahtarı tekrar aç.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                FlatSwitch(checked = s.edge, onCheckedChange = { on ->
+                    if (!on) {
+                        s.changeEdge(false)
+                    } else if (!Settings.canDrawOverlays(ctx)) {
+                        ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName)))
+                    } else {
+                        if (android.os.Build.VERSION.SDK_INT >= 33) notifPerm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        s.changeEdge(true)
+                    }
+                })
             }
 
             Text("Süre takibi", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)

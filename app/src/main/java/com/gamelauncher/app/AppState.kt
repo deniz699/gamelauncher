@@ -8,6 +8,8 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +44,7 @@ class AppState(private val ctx: Context) {
     var themeMode by mutableIntStateOf(prefs.getInt("theme", 0)) // 0 sistem, 1 açık, 2 koyu, 3 AMOLED
     var accent by mutableIntStateOf(prefs.getInt("accent", 0))
     var dynamic by mutableStateOf(prefs.getBoolean("dynamic", false))
+    var edge by mutableStateOf(prefs.getBoolean("edge", false))
     var bgPath by mutableStateOf(prefs.getString("bg", null))
     var bgBlur by mutableStateOf(prefs.getBoolean("bgblur", false))
     var sort by mutableStateOf(
@@ -156,6 +159,18 @@ class AppState(private val ctx: Context) {
         update(pkg) { it.copy(cover = null) }
     }
 
+    /** Oyun içi kenar paneli */
+    fun changeEdge(v: Boolean) { edge = v; prefs.edit().putBoolean("edge", v).apply(); applyEdge() }
+
+    fun applyEdge() {
+        val i = Intent(ctx, EdgeService::class.java)
+        if (edge && Settings.canDrawOverlays(ctx) && UsageSync.hasPermission(ctx)) {
+            runCatching { ContextCompat.startForegroundService(ctx, i) }
+        } else {
+            ctx.stopService(i)
+        }
+    }
+
     fun changeBgBlur(v: Boolean) { bgBlur = v; prefs.edit().putBoolean("bgblur", v).apply() }
 
     /** Galeriden seçilen görseli uygulama duvar kağıdı yapar. */
@@ -200,11 +215,13 @@ class AppState(private val ctx: Context) {
         autoAddGames()
         fetchCovers()
         hasUsage = UsageSync.hasPermission(ctx)
-        if (!hasUsage) return
+        applyEdge()
+        if (!hasUsage) { WidgetUi.updateAll(ctx); return }
         val last = prefs.getLong("lastSync", System.currentTimeMillis() - 7 * 86_400_000L)
         val (s, next) = UsageSync.collect(ctx, games.map { it.pkg }.toSet(), last)
         prefs.edit().putLong("lastSync", next).apply()
         mergeSessions(s)
+        WidgetUi.updateAll(ctx)
     }
 
     // ---------- İnternetten otomatik kapak ----------

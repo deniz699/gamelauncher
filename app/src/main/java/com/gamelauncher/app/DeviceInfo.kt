@@ -45,10 +45,10 @@ import java.util.Locale
 
 private fun readFile(path: String): String? = runCatching { File(path).readText().trim() }.getOrNull()
 
-private fun gb(b: Long): String = String.format(Locale.US, "%.1f GB", b / 1073741824.0)
+internal fun gb(b: Long): String = String.format(Locale.US, "%.1f GB", b / 1073741824.0)
 
 /** İşlemci sıcaklığı: Android çoğu telefonda bu dosyaları uygulamalara kapatır; okunamazsa null. */
-private fun cpuTempC(): Float? {
+internal fun cpuTempC(): Float? {
     val zones = File("/sys/class/thermal").listFiles { f -> f.name.startsWith("thermal_zone") } ?: return null
     var best: Float? = null
     for (z in zones) {
