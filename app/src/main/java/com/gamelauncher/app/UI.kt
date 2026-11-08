@@ -21,6 +21,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import android.os.Build
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.sp
@@ -73,10 +78,20 @@ fun App(s: AppState) {
 
     Box(Modifier.fillMaxSize()) {
         // Arka plan: bulanık oyun görseli + temaya uyan yumuşak perde
-        Image(
-            painterResource(R.drawable.bg_games), null,
-            Modifier.fillMaxSize(), contentScale = ContentScale.Crop
+        val canBlur = Build.VERSION.SDK_INT >= 31
+        val bgBmp = remember(s.bgPath, s.bgBlur) {
+            s.bgPath?.let { loadBg(it, if (s.bgBlur && !canBlur) 110 else 1600) }
+        }
+        val bgMod = Modifier.fillMaxSize().then(
+            if (s.bgBlur && canBlur) Modifier.blur(24.dp, BlurredEdgeTreatment.Unbounded) else Modifier
         )
+        Box(Modifier.fillMaxSize().clipToBounds()) {
+            if (bgBmp != null) {
+                Image(bgBmp, null, bgMod, contentScale = ContentScale.Crop, filterQuality = FilterQuality.Medium)
+            } else {
+                Image(painterResource(R.drawable.bg_games), null, bgMod, contentScale = ContentScale.Crop)
+            }
+        }
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = 0.5f)))
 
         Scaffold(
@@ -135,6 +150,7 @@ fun App(s: AppState) {
             if (tab != 2) {
                 FloatingActionButton(
                     onClick = { showAdd = true },
+                    shape = CircleShape,
                     modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
                         .padding(end = 24.dp, bottom = 104.dp)
                 ) { Icon(Icons.Default.Add, "Oyun ekle") }
@@ -166,9 +182,17 @@ fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) 
         }
         return
     }
+    val panel = RoundedCornerShape(28.dp)
+    Box(
+        Modifier.fillMaxSize()
+            .padding(12.dp, 8.dp, 12.dp, 100.dp)
+            .clip(panel)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.28f))
+            .border(0.8.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f), panel)
+    ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
-        contentPadding = PaddingValues(10.dp, 8.dp, 10.dp, 140.dp),
+        contentPadding = PaddingValues(12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -213,6 +237,7 @@ fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) 
             }
         }
     }
+    }
 }
 
 // ---------------------------------------------------------------- Kapak görseli
@@ -222,6 +247,14 @@ private fun loadCover(path: String): ImageBitmap? = runCatching {
     BitmapFactory.decodeFile(path, b)
     var sample = 1
     while (b.outWidth / sample > 800) sample *= 2
+    BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+}.getOrNull()
+
+private fun loadBg(path: String, maxW: Int): ImageBitmap? = runCatching {
+    val b = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, b)
+    var sample = 1
+    while (b.outWidth / sample > maxW) sample *= 2
     BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
 }.getOrNull()
 
@@ -408,6 +441,9 @@ fun StatsTab(s: AppState) {
 @Composable
 fun SettingsSheet(s: AppState, onClose: () -> Unit) {
     val ctx = LocalContext.current
+    val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) s.setBackground(uri)
+    }
     ModalBottomSheet(onDismissRequest = onClose) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
             Text("Ayarlar", style = MaterialTheme.typography.titleLarge)
@@ -421,7 +457,14 @@ fun SettingsSheet(s: AppState, onClose: () -> Unit) {
 
             if (android.os.Build.VERSION.SDK_INT >= 31) {
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Duvar kağıdı renkleri (Material You)", Modifier.weight(1f))
+                    Column(Modifier.weight(1f)) {
+                        Text("Telefonun renklerini kullan")
+                        Text(
+                            "Uygulama renklerini telefonunun duvar kağıdına göre otomatik ayarlar (Material You). Açıkken vurgu rengi seçilemez.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Switch(checked = s.dynamic, onCheckedChange = { s.setDynamic(it) })
                 }
             }
@@ -440,6 +483,20 @@ fun SettingsSheet(s: AppState, onClose: () -> Unit) {
                         )
                     }
                 }
+            }
+
+            Text("Arka plan", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { bgPicker.launch("image/*") }) {
+                    Icon(Icons.Default.Image, null); Spacer(Modifier.width(6.dp)); Text("Duvar kağıdı seç")
+                }
+                if (s.bgPath != null) {
+                    TextButton(onClick = { s.clearBackground() }) { Text("Varsayılana dön") }
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Arka planı bulanıklaştır", Modifier.weight(1f))
+                Switch(checked = s.bgBlur, onCheckedChange = { s.setBgBlur(it) })
             }
 
             Text("Süre takibi", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)

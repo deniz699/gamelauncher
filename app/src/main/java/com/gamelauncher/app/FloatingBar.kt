@@ -60,7 +60,7 @@ fun FloatingBottomBar(
             .drawBehind {
                 val w = size.width
                 val h = size.height
-                drawRoundRect(container, cornerRadius = CornerRadius(h / 2f))
+                drawRoundRect(container.copy(alpha = 0.72f), cornerRadius = CornerRadius(h / 2f))
 
                 val itemW = w / n
                 val inset = 6.dp.toPx()

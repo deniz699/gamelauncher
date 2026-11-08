@@ -42,6 +42,8 @@ class AppState(private val ctx: Context) {
     var themeMode by mutableIntStateOf(prefs.getInt("theme", 0)) // 0 sistem, 1 açık, 2 koyu, 3 AMOLED
     var accent by mutableIntStateOf(prefs.getInt("accent", 0))
     var dynamic by mutableStateOf(prefs.getBoolean("dynamic", false))
+    var bgPath by mutableStateOf(prefs.getString("bg", null))
+    var bgBlur by mutableStateOf(prefs.getBoolean("bgblur", true))
     var sort by mutableStateOf(
         runCatching { SortMode.valueOf(prefs.getString("sort", "MANUAL")!!) }.getOrDefault(SortMode.MANUAL)
     )
@@ -152,6 +154,32 @@ class AppState(private val ctx: Context) {
     fun clearCover(pkg: String) {
         games.find { it.pkg == pkg }?.cover?.let { File(it).delete() }
         update(pkg) { it.copy(cover = null) }
+    }
+
+    fun setBgBlur(v: Boolean) { bgBlur = v; prefs.edit().putBoolean("bgblur", v).apply() }
+
+    /** Galeriden seçilen görseli uygulama duvar kağıdı yapar. */
+    fun setBackground(uri: Uri) {
+        runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1
+            while (bounds.outHeight / sample > 2400) sample *= 2
+            val bmp = ctx.contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+            } ?: return
+            val f = File(ctx.filesDir, "bg_${System.currentTimeMillis()}.jpg")
+            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+            bgPath?.let { File(it).delete() }
+            bgPath = f.absolutePath
+            prefs.edit().putString("bg", bgPath).apply()
+        }
+    }
+
+    fun clearBackground() {
+        bgPath?.let { File(it).delete() }
+        bgPath = null
+        prefs.edit().remove("bg").apply()
     }
 
     private fun mergeSessions(newS: List<Session>) {
