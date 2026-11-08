@@ -49,9 +49,10 @@ fun FloatingBottomBar(
     val press by animateFloatAsState(if (pressed) 1f else 0f, spring(dampingRatio = 0.55f, stiffness = 380f), label = "press")
 
     val cs = MaterialTheme.colorScheme
-    val container = cs.surfaceContainerHigh
-    val secContainer = cs.secondaryContainer
-    val activeColor = cs.onSecondaryContainer
+    // Çubuk rengi temadan türer: AMOLED'de siyaha, vurgu renginde o renge hafifçe çalar
+    val container = lerp(cs.background, cs.primary, 0.14f)
+    val secContainer = cs.primary.copy(alpha = 0.30f)
+    val activeColor = cs.primary
     val idleColor = cs.onSurfaceVariant
 
     Box(
