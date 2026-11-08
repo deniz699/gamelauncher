@@ -26,6 +26,10 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import android.os.Build
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.activity.compose.BackHandler
@@ -402,15 +406,13 @@ fun DetailSheet(s: AppState, pkg: String, onClose: () -> Unit) {
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { s.toggleFav(pkg) }) {
-                    Icon(if (g.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null)
-                    Spacer(Modifier.width(6.dp)); Text(if (g.favorite) "Favoriden çıkar" else "Favori")
-                }
-                OutlinedButton(onClick = { picker.launch("image/*") }) {
-                    Icon(Icons.Default.Image, null); Spacer(Modifier.width(6.dp)); Text("Kapak")
-                }
+                SoftButton(
+                    if (g.favorite) "Favoriden çıkar" else "Favori", { s.toggleFav(pkg) },
+                    icon = if (g.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder
+                )
+                SoftButton("Kapak", { picker.launch("image/*") }, icon = Icons.Default.Image)
             }
-            if (g.cover != null) TextButton(onClick = { s.clearCover(pkg) }) { Text("Kapağı sıfırla") }
+            if (g.cover != null) SoftButton("Kapağı sıfırla", { s.clearCover(pkg) }, Modifier.padding(top = 8.dp))
             if (s.sort == SortMode.MANUAL) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Sıralamadaki yeri", Modifier.weight(1f))
@@ -496,11 +498,7 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
 
             Text("Tema", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Sistem", "Açık", "Koyu", "AMOLED").forEachIndexed { i, label ->
-                    FilterChip(selected = s.themeMode == i, onClick = { s.setTheme(i) }, label = { Text(label) })
-                }
-            }
+            SegmentedChoice(listOf("Sistem", "Açık", "Koyu", "AMOLED"), s.themeMode) { s.setTheme(it) }
 
             if (android.os.Build.VERSION.SDK_INT >= 31) {
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -512,7 +510,7 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(checked = s.dynamic, onCheckedChange = { s.setDynamic(it) })
+                    FlatSwitch(checked = s.dynamic, onCheckedChange = { s.setDynamic(it) })
                 }
             }
 
@@ -534,16 +532,14 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
 
             Text("Arka plan", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { bgPicker.launch("image/*") }) {
-                    Icon(Icons.Default.Image, null); Spacer(Modifier.width(6.dp)); Text("Duvar kağıdı seç")
-                }
+                SoftButton("Duvar kağıdı seç", { bgPicker.launch("image/*") }, icon = Icons.Default.Image)
                 if (s.bgPath != null) {
-                    TextButton(onClick = { s.clearBackground() }) { Text("Varsayılana dön") }
+                    SoftButton("Varsayılana dön", { s.clearBackground() })
                 }
             }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Arka planı bulanıklaştır", Modifier.weight(1f))
-                Switch(checked = s.bgBlur, onCheckedChange = { s.changeBgBlur(it) })
+                FlatSwitch(checked = s.bgBlur, onCheckedChange = { s.changeBgBlur(it) })
             }
 
             Text("Süre takibi", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
@@ -551,10 +547,11 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                 if (s.hasUsage) "Kullanım erişimi verildi ✓" else "Kullanım erişimi verilmedi — süreler ölçülemez.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            OutlinedButton(
-                onClick = { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
-                modifier = Modifier.padding(top = 8.dp)
-            ) { Text("Kullanım erişimi ayarlarını aç") }
+            SoftButton(
+                "Kullanım erişimi ayarlarını aç",
+                { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
+                Modifier.padding(top = 8.dp)
+            )
         }
         }
     }
@@ -581,5 +578,85 @@ fun PlayButton(onClick: () -> Unit, modifier: Modifier = Modifier, label: String
         contentAlignment = Alignment.Center
     ) {
         Text(label, color = fg, fontWeight = FontWeight.SemiBold, fontSize = if (compact) 12.sp else 14.sp)
+    }
+}
+
+// ---------------------------------------------------------------- Düz (flat) bileşenler
+
+/** Düz, tonlu buton: gölge/ripple yok, basınca yumuşakça küçülür. */
+@Composable
+fun SoftButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+    val src = remember { MutableInteractionSource() }
+    val down by src.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (down) 0.96f else 1f, spring(dampingRatio = 0.65f, stiffness = 450f), label = "sbScale")
+    val cs = MaterialTheme.colorScheme
+    val bg by animateColorAsState(
+        if (down) cs.secondaryContainer.copy(alpha = 0.7f) else cs.secondaryContainer, tween(140), label = "sbBg"
+    )
+    Row(
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(14.dp))
+            .background(bg)
+            .clickable(interactionSource = src, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (icon != null) {
+            Icon(icon, null, Modifier.size(18.dp), tint = cs.onSecondaryContainer)
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(label, color = cs.onSecondaryContainer, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+    }
+}
+
+/** Düz, modern açma/kapama düğmesi (tema rengine uyar). */
+@Composable
+fun FlatSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val x by animateFloatAsState(if (checked) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 500f), label = "swX")
+    val track by animateColorAsState(if (checked) cs.primary else cs.surfaceContainerHighest, tween(180), label = "swT")
+    val thumb by animateColorAsState(if (checked) cs.onPrimary else cs.outline, tween(180), label = "swH")
+    Box(
+        Modifier
+            .width(48.dp).height(28.dp)
+            .clip(RoundedCornerShape(50))
+            .background(track)
+            .toggleable(
+                value = checked, role = Role.Switch,
+                interactionSource = remember { MutableInteractionSource() }, indication = null,
+                onValueChange = onCheckedChange
+            )
+            .padding(4.dp)
+    ) {
+        Box(
+            Modifier
+                .offset { IntOffset((x * 20.dp.toPx()).roundToInt(), 0) }
+                .size(20.dp).clip(CircleShape).background(thumb)
+        )
+    }
+}
+
+/** Yan yana seçenekler; seçili olan tema rengiyle dolu. */
+@Composable
+fun SegmentedChoice(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(cs.surfaceContainerHigh).padding(4.dp)
+    ) {
+        options.forEachIndexed { i, label ->
+            val sel = i == selected
+            val bg by animateColorAsState(if (sel) cs.primary else Color.Transparent, tween(180), label = "segBg")
+            val fg by animateColorAsState(if (sel) cs.onPrimary else cs.onSurfaceVariant, tween(180), label = "segFg")
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(bg)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(i) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(label, color = fg, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            }
+        }
     }
 }
