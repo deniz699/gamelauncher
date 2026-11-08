@@ -62,7 +62,7 @@ class AppState(private val ctx: Context) {
         else -> when (themeMode) { 1 -> false; 2, 3 -> true; else -> sysDark }
     }
 
-    fun setIconMode(v: Int) { iconMode = v; prefs.edit().putInt("icon_mode", v).apply() }
+    @JvmName("applyIconMode") fun setIconMode(v: Int) { iconMode = v; prefs.edit().putInt("icon_mode", v).apply() }
 
     /** Ana ekran simgesini değiştirir (activity-alias). Zaten doğruysa dokunmaz. */
     fun applyIcon(sysDark: Boolean) {
