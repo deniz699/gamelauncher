@@ -26,6 +26,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import android.os.Build
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.sp
@@ -60,6 +62,11 @@ import androidx.core.graphics.drawable.toBitmap
 
 // ---------------------------------------------------------------- Ana ekran
 
+/** Arka plana göre okunur yazı rengi: koyu temada beyaz, açık temada siyah. */
+@Composable
+fun onBgColor(): Color =
+    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color.White else Color.Black
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun App(s: AppState) {
@@ -69,6 +76,8 @@ fun App(s: AppState) {
     var sortMenu by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<String?>(null) }
     val ctx = LocalContext.current
+    // Geri: Favoriler/İstatistik'ten ana sayfaya döner, ana sayfadayken uygulamadan çıkar
+    BackHandler(enabled = tab != 0) { tab = 0 }
 
     val tabs: List<Pair<String, ImageVector>> = listOf(
         "Tümü" to Icons.Default.SportsEsports,
@@ -80,10 +89,10 @@ fun App(s: AppState) {
         // Arka plan: bulanık oyun görseli + temaya uyan yumuşak perde
         val canBlur = Build.VERSION.SDK_INT >= 31
         val bgBmp = remember(s.bgPath, s.bgBlur) {
-            s.bgPath?.let { loadBg(it, if (s.bgBlur && !canBlur) 110 else 1600) }
+            s.bgPath?.let { loadBg(it, if (s.bgBlur && !canBlur) 220 else 1600) }
         }
         val bgMod = Modifier.fillMaxSize().then(
-            if (s.bgBlur && canBlur) Modifier.blur(24.dp, BlurredEdgeTreatment.Unbounded) else Modifier
+            if (s.bgBlur && canBlur) Modifier.blur(12.dp, BlurredEdgeTreatment.Unbounded) else Modifier
         )
         Box(Modifier.fillMaxSize().clipToBounds()) {
             if (bgBmp != null) {
@@ -101,7 +110,9 @@ fun App(s: AppState) {
                     title = { Text("Oyunlarım", fontWeight = FontWeight.Bold) },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent
+                        scrolledContainerColor = Color.Transparent,
+                        titleContentColor = onBgColor(),
+                        actionIconContentColor = onBgColor()
                     ),
                     actions = {
                         if (tab != 2) {
@@ -166,10 +177,10 @@ fun App(s: AppState) {
             )
             }
         }
+        if (showSettings) SettingsPage(s) { showSettings = false }
     }
 
     if (showAdd) AddSheet(s) { showAdd = false }
-    if (showSettings) SettingsSheet(s) { showSettings = false }
     selected?.let { DetailSheet(s, it) { selected = null } }
 }
 
@@ -178,7 +189,7 @@ fun App(s: AppState) {
 fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) -> Unit) {
     if (list.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(emptyText, Modifier.padding(32.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(emptyText, Modifier.padding(32.dp), color = onBgColor())
         }
         return
     }
@@ -299,9 +310,22 @@ fun AddSheet(s: AppState, onClose: () -> Unit) {
             if (shown.isEmpty()) {
                 Text("Eklenebilecek oyun yok.", Modifier.padding(vertical = 24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            OutlinedTextField(
+            TextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
-                label = { Text("Ara") }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                placeholder = { Text("Oyun ara") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Temizle") }
+                    }
+                },
+                shape = RoundedCornerShape(28.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent
+                ),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
             )
             LazyColumn {
                 items(shown, key = { it.pkg }) { a ->
@@ -405,7 +429,7 @@ private fun InfoRow(label: String, value: String) {
 @Composable
 fun StatsTab(s: AppState) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        Card(Modifier.fillMaxWidth()) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f))) {
             Column(Modifier.padding(16.dp)) {
                 Text("Tüm oyunlar", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
@@ -413,9 +437,9 @@ fun StatsTab(s: AppState) {
             }
         }
         Spacer(Modifier.height(16.dp))
-        Text("Oyun başına", style = MaterialTheme.typography.titleMedium)
+        Text("En çok oynananlar", style = MaterialTheme.typography.titleMedium, color = onBgColor())
         s.games.sortedByDescending { playedMs(s.sessions, it.pkg, Range.ALL) }.forEach { g ->
-            Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f))) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Cover(g, Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)), 0.85f)
                     Spacer(Modifier.width(12.dp))
@@ -439,14 +463,19 @@ fun StatsTab(s: AppState) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SettingsSheet(s: AppState, onClose: () -> Unit) {
+fun SettingsPage(s: AppState, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) s.setBackground(uri)
     }
-    ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+    BackHandler(onBack = onClose)
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(4.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri") }
             Text("Ayarlar", style = MaterialTheme.typography.titleLarge)
+        }
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
 
             Text("Tema", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -508,6 +537,7 @@ fun SettingsSheet(s: AppState, onClose: () -> Unit) {
                 onClick = { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
                 modifier = Modifier.padding(top = 8.dp)
             ) { Text("Kullanım erişimi ayarlarını aç") }
+        }
         }
     }
 }

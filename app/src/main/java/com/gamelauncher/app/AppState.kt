@@ -43,7 +43,7 @@ class AppState(private val ctx: Context) {
     var accent by mutableIntStateOf(prefs.getInt("accent", 0))
     var dynamic by mutableStateOf(prefs.getBoolean("dynamic", false))
     var bgPath by mutableStateOf(prefs.getString("bg", null))
-    var bgBlur by mutableStateOf(prefs.getBoolean("bgblur", true))
+    var bgBlur by mutableStateOf(prefs.getBoolean("bgblur", false))
     var sort by mutableStateOf(
         runCatching { SortMode.valueOf(prefs.getString("sort", "MANUAL")!!) }.getOrDefault(SortMode.MANUAL)
     )
