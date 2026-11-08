@@ -331,7 +331,12 @@ fun AddSheet(s: AppState, onClose: () -> Unit) {
     val added = s.games.map { it.pkg }.toSet()
     val shown = all.filter { it.pkg !in added && it.name.contains(query, ignoreCase = true) }
 
-    ModalBottomSheet(onDismissRequest = onClose) {
+    ModalBottomSheet(
+        onDismissRequest = onClose,
+        containerColor = glassColor(),
+        scrimColor = Color.Black.copy(alpha = 0.2f)
+    ) {
+        GlassBlurBehind()
         Column(Modifier.fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {
             Text("Oyun ekle", style = MaterialTheme.typography.titleLarge)
             Text(

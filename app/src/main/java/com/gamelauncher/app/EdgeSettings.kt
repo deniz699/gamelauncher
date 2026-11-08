@@ -141,7 +141,12 @@ fun EdgePanelSettings() {
         var query by remember { mutableStateOf("") }
         val shown = ordered.filter { it.name.contains(query, ignoreCase = true) }
 
-        ModalBottomSheet(onDismissRequest = { picker = false }) {
+        ModalBottomSheet(
+            onDismissRequest = { picker = false },
+            containerColor = glassColor(),
+            scrimColor = Color.Black.copy(alpha = 0.2f)
+        ) {
+            GlassBlurBehind()
             Column(Modifier.fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {
                 Text("Panele eklenecek uygulamalar", style = MaterialTheme.typography.titleLarge)
                 Text(
