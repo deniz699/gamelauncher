@@ -10,6 +10,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.animateColorAsState
@@ -106,25 +109,9 @@ fun App(s: AppState) {
                     }
                 )
             },
-            bottomBar = {
-                NavigationBar {
-                    tabs.forEachIndexed { i, (label, icon) ->
-                        NavigationBarItem(
-                            selected = tab == i,
-                            onClick = { tab = i },
-                            icon = { Icon(icon, label) },
-                            label = { Text(label) }
-                        )
-                    }
-                }
-            },
-            floatingActionButton = {
-                if (tab != 2) {
-                    FloatingActionButton(onClick = { showAdd = true }) { Icon(Icons.Default.Add, "Oyun ekle") }
-                }
-            }
         ) { pad ->
-            Column(Modifier.fillMaxSize().padding(pad)) {
+            Box(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding())) {
+            Column(Modifier.fillMaxSize()) {
                 if (!s.hasUsage) {
                     Card(Modifier.fillMaxWidth().padding(12.dp, 8.dp)) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -144,6 +131,24 @@ fun App(s: AppState) {
                     else -> StatsTab(s)
                 }
             }
+
+            if (tab != 2) {
+                FloatingActionButton(
+                    onClick = { showAdd = true },
+                    modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
+                        .padding(end = 24.dp, bottom = 104.dp)
+                ) { Icon(Icons.Default.Add, "Oyun ekle") }
+            }
+
+            FloatingBottomBar(
+                items = tabs,
+                selected = tab,
+                onSelect = { tab = it },
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 14.dp)
+                    .widthIn(max = 420.dp).fillMaxWidth().height(64.dp)
+            )
+            }
         }
     }
 
@@ -152,6 +157,7 @@ fun App(s: AppState) {
     selected?.let { DetailSheet(s, it) { selected = null } }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) -> Unit) {
     if (list.isEmpty()) {
@@ -162,19 +168,24 @@ fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) 
     }
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
-        contentPadding = PaddingValues(10.dp, 8.dp, 10.dp, 96.dp),
+        contentPadding = PaddingValues(10.dp, 8.dp, 10.dp, 140.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(list, key = { it.pkg }) { g ->
-            // Şeffaf, buzlu cam görünümlü kutu
+            // Yarı saydam kutu; dokun = oyunu aç, uzun bas = detay
+            val shape = RoundedCornerShape(14.dp)
+            val textColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color.White else Color.Black
             Card(
-                onClick = { onOpen(g.pkg) },
-                shape = RoundedCornerShape(14.dp),
+                shape = shape,
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f)
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.60f)
                 ),
-                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f))
+                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)),
+                modifier = Modifier.clip(shape).combinedClickable(
+                    onClick = { s.launch(g.pkg) },
+                    onLongClick = { onOpen(g.pkg) }
+                )
             ) {
                 Column {
                     Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
@@ -187,20 +198,16 @@ fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) 
                                 if (g.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 "Favori",
                                 Modifier.size(16.dp),
-                                tint = if (g.favorite) MaterialTheme.colorScheme.primary
-                                else Color.White
+                                tint = if (g.favorite) MaterialTheme.colorScheme.primary else Color.White
                             )
                         }
                     }
                     Text(
-                        g.name, Modifier.padding(6.dp, 4.dp, 6.dp, 3.dp),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.SemiBold, fontSize = 11.sp
-                    )
-                    PlayButton(
-                        onClick = { s.launch(g.pkg) },
-                        modifier = Modifier.fillMaxWidth().padding(6.dp, 0.dp, 6.dp, 6.dp),
-                        compact = true
+                        g.name,
+                        Modifier.fillMaxWidth().padding(4.dp, 6.dp, 4.dp, 6.dp),
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold, fontSize = 11.sp, lineHeight = 13.sp,
+                        textAlign = TextAlign.Center, color = textColor
                     )
                 }
             }
