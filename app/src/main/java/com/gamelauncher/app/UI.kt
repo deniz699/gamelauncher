@@ -74,6 +74,7 @@ fun App(s: AppState) {
     var showAdd by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
+    var showDevice by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<String?>(null) }
     val ctx = LocalContext.current
     // Geri: Favoriler/İstatistik'ten ana sayfaya döner, ana sayfadayken uygulamadan çıkar
@@ -105,6 +106,7 @@ fun App(s: AppState) {
 
         Scaffold(
             containerColor = Color.Transparent,
+            contentColor = onBgColor(),
             topBar = {
                 TopAppBar(
                     title = { Text("Oyunlarım", fontWeight = FontWeight.Bold) },
@@ -115,6 +117,15 @@ fun App(s: AppState) {
                         actionIconContentColor = onBgColor()
                     ),
                     actions = {
+                        TextButton(
+                            onClick = { showDevice = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                            colors = ButtonDefaults.textButtonColors(contentColor = onBgColor())
+                        ) {
+                            Icon(Icons.Default.PhoneAndroid, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Telefon", fontSize = 12.sp)
+                        }
                         if (tab != 2) {
                             Box {
                                 IconButton(onClick = { sortMenu = true }) {
@@ -177,7 +188,8 @@ fun App(s: AppState) {
             )
             }
         }
-        if (showSettings) SettingsPage(s) { showSettings = false }
+        if (showSettings) SettingsPage(s, onDevice = { showDevice = true }) { showSettings = false }
+        if (showDevice) DevicePage { showDevice = false }
     }
 
     if (showAdd) AddSheet(s) { showAdd = false }
@@ -214,7 +226,7 @@ fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) 
             Card(
                 shape = shape,
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.60f)
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.60f), contentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)),
                 modifier = Modifier.clip(shape).combinedClickable(
@@ -429,7 +441,7 @@ private fun InfoRow(label: String, value: String) {
 @Composable
 fun StatsTab(s: AppState) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f))) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f), contentColor = MaterialTheme.colorScheme.onSurface)) {
             Column(Modifier.padding(16.dp)) {
                 Text("Tüm oyunlar", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
@@ -439,7 +451,7 @@ fun StatsTab(s: AppState) {
         Spacer(Modifier.height(16.dp))
         Text("En çok oynananlar", style = MaterialTheme.typography.titleMedium, color = onBgColor())
         s.games.sortedByDescending { playedMs(s.sessions, it.pkg, Range.ALL) }.forEach { g ->
-            Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f))) {
+            Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f), contentColor = MaterialTheme.colorScheme.onSurface)) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Cover(g, Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)), 0.85f)
                     Spacer(Modifier.width(12.dp))
@@ -463,7 +475,7 @@ fun StatsTab(s: AppState) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SettingsPage(s: AppState, onClose: () -> Unit) {
+fun SettingsPage(s: AppState, onDevice: () -> Unit, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) s.setBackground(uri)
@@ -526,6 +538,11 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Arka planı bulanıklaştır", Modifier.weight(1f))
                 Switch(checked = s.bgBlur, onCheckedChange = { s.changeBgBlur(it) })
+            }
+
+            Text("Cihaz", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
+            OutlinedButton(onClick = onDevice) {
+                Icon(Icons.Default.PhoneAndroid, null); Spacer(Modifier.width(6.dp)); Text("Cihaz bilgileri")
             }
 
             Text("Süre takibi", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
