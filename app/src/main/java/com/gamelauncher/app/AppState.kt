@@ -42,12 +42,10 @@ class AppState(private val ctx: Context) {
     var themeMode by mutableIntStateOf(prefs.getInt("theme", 0)) // 0 sistem, 1 açık, 2 koyu, 3 AMOLED
     var accent by mutableIntStateOf(prefs.getInt("accent", 0))
     var dynamic by mutableStateOf(prefs.getBoolean("dynamic", false))
-    var glass by mutableStateOf(prefs.getBoolean("glass", true))
     var sort by mutableStateOf(
         runCatching { SortMode.valueOf(prefs.getString("sort", "MANUAL")!!) }.getOrDefault(SortMode.MANUAL)
     )
 
-    fun changeGlass(v: Boolean) { glass = v; prefs.edit().putBoolean("glass", v).apply() }
     fun setTheme(v: Int) { themeMode = v; prefs.edit().putInt("theme", v).apply() }
     @JvmName("applyAccent") fun setAccent(v: Int) { accent = v; prefs.edit().putInt("accent", v).apply() }
     @JvmName("applyDynamic") fun setDynamic(v: Boolean) { dynamic = v; prefs.edit().putBoolean("dynamic", v).apply() }

@@ -17,6 +17,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,8 +61,6 @@ fun App(s: AppState) {
     var sortMenu by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<String?>(null) }
     val ctx = LocalContext.current
-    val backdrop = rememberGlassBackdrop()
-    val bg = MaterialTheme.colorScheme.background
 
     val tabs: List<Pair<String, ImageVector>> = listOf(
         "Tümü" to Icons.Default.SportsEsports,
@@ -66,35 +68,63 @@ fun App(s: AppState) {
         "İstatistik" to Icons.Default.BarChart
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Oyunlarım", fontWeight = FontWeight.Bold) },
-                actions = {
-                    if (tab != 2) {
-                        Box {
-                            IconButton(onClick = { sortMenu = true }) {
-                                Icon(Icons.AutoMirrored.Filled.Sort, "Sırala")
-                            }
-                            DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                                SortMode.entries.forEach { m ->
-                                    DropdownMenuItem(
-                                        text = { Text(m.label) },
-                                        leadingIcon = { if (s.sort == m) Icon(Icons.Default.Check, null) },
-                                        onClick = { s.setSort(m); sortMenu = false }
-                                    )
+    Box(Modifier.fillMaxSize()) {
+        // Arka plan: bulanık oyun görseli + temaya uyan yumuşak perde
+        Image(
+            painterResource(R.drawable.bg_games), null,
+            Modifier.fillMaxSize(), contentScale = ContentScale.Crop
+        )
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = 0.5f)))
+
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { Text("Oyunlarım", fontWeight = FontWeight.Bold) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
+                    ),
+                    actions = {
+                        if (tab != 2) {
+                            Box {
+                                IconButton(onClick = { sortMenu = true }) {
+                                    Icon(Icons.AutoMirrored.Filled.Sort, "Sırala")
+                                }
+                                DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                                    SortMode.entries.forEach { m ->
+                                        DropdownMenuItem(
+                                            text = { Text(m.label) },
+                                            leadingIcon = { if (s.sort == m) Icon(Icons.Default.Check, null) },
+                                            onClick = { s.setSort(m); sortMenu = false }
+                                        )
+                                    }
                                 }
                             }
                         }
+                        IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Ayarlar") }
                     }
-                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Ayarlar") }
+                )
+            },
+            bottomBar = {
+                NavigationBar {
+                    tabs.forEachIndexed { i, (label, icon) ->
+                        NavigationBarItem(
+                            selected = tab == i,
+                            onClick = { tab = i },
+                            icon = { Icon(icon, label) },
+                            label = { Text(label) }
+                        )
+                    }
                 }
-            )
-        }
-    ) { pad ->
-        Box(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding())) {
-            Box(Modifier.fillMaxSize().glassSource(backdrop, bg)) {
-            Column(Modifier.fillMaxSize()) {
+            },
+            floatingActionButton = {
+                if (tab != 2) {
+                    FloatingActionButton(onClick = { showAdd = true }) { Icon(Icons.Default.Add, "Oyun ekle") }
+                }
+            }
+        ) { pad ->
+            Column(Modifier.fillMaxSize().padding(pad)) {
                 if (!s.hasUsage) {
                     Card(Modifier.fillMaxWidth().padding(12.dp, 8.dp)) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -114,26 +144,6 @@ fun App(s: AppState) {
                     else -> StatsTab(s)
                 }
             }
-
-            if (tab != 2) {
-                FloatingActionButton(
-                    onClick = { showAdd = true },
-                    modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
-                        .padding(end = 24.dp, bottom = 104.dp)
-                ) { Icon(Icons.Default.Add, "Oyun ekle") }
-            }
-            }
-
-            GlassBottomBar(
-                items = tabs,
-                selected = tab,
-                glass = s.glass,
-                onSelect = { tab = it },
-                backdrop = backdrop,
-                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 14.dp)
-                    .widthIn(max = 420.dp).fillMaxWidth().height(64.dp)
-            )
         }
     }
 
@@ -151,35 +161,46 @@ fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) 
         return
     }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(150.dp),
-        contentPadding = PaddingValues(12.dp, 12.dp, 12.dp, 140.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        columns = GridCells.Fixed(4),
+        contentPadding = PaddingValues(10.dp, 8.dp, 10.dp, 96.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(list, key = { it.pkg }) { g ->
-            Card(onClick = { onOpen(g.pkg) }, shape = RoundedCornerShape(20.dp)) {
+            // Şeffaf, buzlu cam görünümlü kutu
+            Card(
+                onClick = { onOpen(g.pkg) },
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f)
+                ),
+                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f))
+            ) {
                 Column {
                     Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
                         Cover(g, Modifier.fillMaxSize())
                         IconButton(
                             onClick = { s.toggleFav(g.pkg) },
-                            modifier = Modifier.align(Alignment.TopEnd)
+                            modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
                         ) {
                             Icon(
                                 if (g.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 "Favori",
+                                Modifier.size(16.dp),
                                 tint = if (g.favorite) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurface
+                                else Color.White
                             )
                         }
                     }
                     Text(
-                        g.name, Modifier.padding(12.dp, 8.dp, 12.dp, 4.dp),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold
+                        g.name, Modifier.padding(6.dp, 4.dp, 6.dp, 3.dp),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold, fontSize = 11.sp
                     )
                     PlayButton(
                         onClick = { s.launch(g.pkg) },
-                        modifier = Modifier.fillMaxWidth().padding(12.dp, 0.dp, 12.dp, 12.dp)
+                        modifier = Modifier.fillMaxWidth().padding(6.dp, 0.dp, 6.dp, 6.dp),
+                        compact = true
                     )
                 }
             }
@@ -391,11 +412,6 @@ fun SettingsSheet(s: AppState, onClose: () -> Unit) {
                 }
             }
 
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Liquid glass alt çubuk", Modifier.weight(1f))
-                Switch(checked = s.glass, onCheckedChange = { s.changeGlass(it) })
-            }
-
             if (android.os.Build.VERSION.SDK_INT >= 31) {
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Duvar kağıdı renkleri (Material You)", Modifier.weight(1f))
@@ -434,26 +450,24 @@ fun SettingsSheet(s: AppState, onClose: () -> Unit) {
 
 // ---------------------------------------------------------------- Oyna butonu
 
-/** Düz (flat) renkli, gölgesiz, ripple'sız; basınca yumuşakça küçülüp rengi açılır. */
+/** Düz (flat) renkli, gölgesiz, ripple'sız; basınca yumuşakça küçülür. Yazı rengi zemine göre siyah/beyaz. */
 @Composable
-fun PlayButton(onClick: () -> Unit, modifier: Modifier = Modifier, label: String = "Oyna") {
+fun PlayButton(onClick: () -> Unit, modifier: Modifier = Modifier, label: String = "Oyna", compact: Boolean = false) {
     val src = remember { MutableInteractionSource() }
     val down by src.collectIsPressedAsState()
     val scale by animateFloatAsState(if (down) 0.95f else 1f, spring(dampingRatio = 0.65f, stiffness = 420f), label = "playScale")
     val base = MaterialTheme.colorScheme.primary
     val bg by animateColorAsState(if (down) base.copy(alpha = 0.82f) else base, tween(160), label = "playBg")
-    Row(
+    val fg = if (base.luminance() > 0.5f) Color.Black else Color.White
+    Box(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(if (compact) 10.dp else 14.dp))
             .background(bg)
             .clickable(interactionSource = src, indication = null, onClick = onClick)
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = if (compact) 6.dp else 12.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.onPrimary)
-        Spacer(Modifier.width(4.dp))
-        Text(label, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold)
+        Text(label, color = fg, fontWeight = FontWeight.SemiBold, fontSize = if (compact) 12.sp else 14.sp)
     }
 }
