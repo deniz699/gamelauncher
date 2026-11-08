@@ -198,7 +198,6 @@ private fun SettingsRow(icon: ImageVector, title: String, subtitle: String?, onC
 @Composable
 private fun EdgePage(s: AppState) {
     val ctx = LocalContext.current
-    val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("Kenar panelini aç")
@@ -217,7 +216,6 @@ private fun EdgePage(s: AppState) {
             } else if (!Settings.canDrawOverlays(ctx)) {
                 ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName)))
             } else {
-                if (android.os.Build.VERSION.SDK_INT >= 33) notifPerm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                 s.changeEdge(true)
             }
         })
@@ -317,6 +315,29 @@ private fun PermissionsPage(s: AppState) {
     SoftButton(
         "Üstte gösterme ayarlarını aç",
         { ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName))) },
+        Modifier.padding(top = 8.dp)
+    )
+
+    Text("Üstteki bildirim", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleSmall)
+    Text(
+        "Android, arka planda çalışan yan panel ve oyun içi bilgi için bir bildirim gösterilmesini şart koşar. " +
+            "Bildirimi kapatırsan özellikler yine çalışır. Açılan ekranda \"Arka plan hizmeti\"ni kapat.",
+        Modifier.padding(top = 4.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    SoftButton(
+        "Bildirim ayarlarını aç",
+        {
+            val i = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, "edge_quiet")
+            runCatching { ctx.startActivity(i) }.onFailure {
+                runCatching {
+                    ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
+                }
+            }
+        },
         Modifier.padding(top = 8.dp)
     )
 }
