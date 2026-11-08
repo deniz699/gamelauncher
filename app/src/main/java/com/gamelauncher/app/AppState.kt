@@ -27,9 +27,9 @@ class AppState(private val ctx: Context) {
     )
 
     fun setTheme(v: Int) { themeMode = v; prefs.edit().putInt("theme", v).apply() }
-    fun setAccent(v: Int) { accent = v; prefs.edit().putInt("accent", v).apply() }
-    fun setDynamic(v: Boolean) { dynamic = v; prefs.edit().putBoolean("dynamic", v).apply() }
-    fun setSort(v: SortMode) { sort = v; prefs.edit().putString("sort", v.name).apply() }
+    @JvmName("applyAccent") fun setAccent(v: Int) { accent = v; prefs.edit().putInt("accent", v).apply() }
+    @JvmName("applyDynamic") fun setDynamic(v: Boolean) { dynamic = v; prefs.edit().putBoolean("dynamic", v).apply() }
+    @JvmName("applySort") fun setSort(v: SortMode) { sort = v; prefs.edit().putString("sort", v.name).apply() }
 
     fun sortedGames(): List<Game> = when (sort) {
         SortMode.MANUAL -> games
