@@ -142,10 +142,15 @@ object WidgetUi {
         }
     }
 
-    /** Ayar ekranındaki önizleme (sıcaklık ve telefon özeti widget'ları için). */
-    fun previewBitmap(ctx: Context, provider: String?, st: WStyle): Bitmap? = when (provider) {
-        TempWidget::class.java.name -> WidgetGfx.tempsBitmap(540, 270, st, batteryTemp(ctx), cpuTempC())
-        InfoWidget::class.java.name -> WidgetGfx.infoBitmap(280f, 150f, 2.5f, st, infoData(ctx))
+    /** Önizleme için cihaz verisi; ağır olduğundan ayar ekranında bir kez okunur. */
+    class PreviewData(val info: WidgetGfx.InfoData, val battery: Float?, val cpu: Float?)
+
+    fun previewData(ctx: Context) = PreviewData(infoData(ctx), batteryTemp(ctx), cpuTempC())
+
+    /** Ayar ekranındaki önizleme (sıcaklık ve telefon özeti widget'ları için). Sadece çizim yapar, hafiftir. */
+    fun previewBitmap(provider: String?, st: WStyle, d: PreviewData): Bitmap? = when (provider) {
+        TempWidget::class.java.name -> WidgetGfx.tempsBitmap(400, 200, st, d.battery, d.cpu)
+        InfoWidget::class.java.name -> WidgetGfx.infoBitmap(280f, 150f, 2f, st, d.info)
         else -> null
     }
 

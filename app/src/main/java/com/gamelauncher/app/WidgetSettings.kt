@@ -21,6 +21,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 private val swatches = listOf(
     0xFFFFFFFF, 0xFF000000, 0xFF1B1A22, 0xFF0F172A, 0xFF1E293B, 0xFF6750A4, 0xFFBFA8FF,
@@ -111,10 +114,17 @@ internal fun StyleEditor(st: WStyle, showTempColors: Boolean, onChange: (WStyle)
 fun WidgetColorSettings() {
     val ctx = LocalContext.current
     var st by remember { mutableStateOf(WidgetStyle.loadDefault(ctx)) }
+    var rev by remember { mutableIntStateOf(0) }
+    LaunchedEffect(rev) {
+        if (rev > 0) {
+            delay(250)
+            WidgetUi.updateAll(ctx)
+        }
+    }
     fun change(n: WStyle) {
         st = n
         WidgetStyle.saveDefault(ctx, n)
-        WidgetUi.updateAll(ctx)
+        rev++
     }
 
     Text("Varsayılan widget renkleri", Modifier.padding(top = 20.dp, bottom = 2.dp), style = MaterialTheme.typography.titleSmall)

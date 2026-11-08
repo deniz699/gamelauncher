@@ -48,6 +48,7 @@ class EdgeService : Service() {
     private var gamePkgs: Set<String> = emptySet()
     private var counter = 0
     private var handleSig = ""
+    private var panelApp: String? = null   // panelden açılan uygulama; üstünde durduğu sürece çizgi kalır
     private val density get() = resources.displayMetrics.density
 
     private val poll = object : Runnable {
@@ -117,7 +118,9 @@ class EdgeService : Service() {
         if (counter++ % 8 == 0) gamePkgs = Store(this).loadGames().map { it.pkg }.toSet()
         runCatching { pollForeground() }
         val cur = fg
-        val show = cur != null && cur in gamePkgs
+        // Panelden açılan uygulama ön plana geçene kadar beklenir; başka bir uygulamaya geçilirse sıfırlanır
+        if (cur != null && cur !in gamePkgs && cur != panelApp) panelApp = null
+        val show = cur != null && (cur in gamePkgs || cur == panelApp)
         if (show && handleView != null && handleSig != edgeSig()) removeHandle()   // ayar değişti: yeniden çiz
         if (show && handleView == null && panelView == null) addHandle()
         if (!show) { removeHandle(); closePanel() }
@@ -357,13 +360,14 @@ class EdgeService : Service() {
         val i = packageManager.getLaunchIntentForPackage(pkg) ?: return
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         closePanel()
+        panelApp = pkg
         if (popup) {
-            val dm = resources.displayMetrics
-            val w = (dm.widthPixels * 0.8f).toInt()
-            val h = (dm.heightPixels * 0.55f).toInt()
-            val l = (dm.widthPixels - w) / 2
-            val t = (dm.heightPixels - h) / 4
-            val opts = ActivityOptions.makeBasic().setLaunchBounds(Rect(l, t, l + w, t + h))
+            // Kare pencere: kısa kenarın %72'si, ekranın ortasında (oyun yatay olsa da kare kalır)
+            val (sw, sh) = screenSize()
+            val side = (minOf(sw, sh) * 0.72f).toInt()
+            val l = (sw - side) / 2
+            val t = (sh - side) / 2
+            val opts = ActivityOptions.makeBasic().setLaunchBounds(Rect(l, t, l + side, t + side))
             runCatching { startActivity(i, opts.toBundle()) }.onFailure { runCatching { startActivity(i) } }
         } else {
             runCatching { startActivity(i) }

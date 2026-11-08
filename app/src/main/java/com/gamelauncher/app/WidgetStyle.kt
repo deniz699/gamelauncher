@@ -22,7 +22,7 @@ data class WStyle(
  */
 object WidgetStyle {
     val FACTORY = WStyle(
-        bg = 0xFF1B1A22.toInt(),
+        bg = 0xFF000000.toInt(),
         alpha = 230,
         text = 0xFFFFFFFF.toInt(),
         accent = 0xFFBFA8FF.toInt(),

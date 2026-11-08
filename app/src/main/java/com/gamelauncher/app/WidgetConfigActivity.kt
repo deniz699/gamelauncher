@@ -26,6 +26,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 /**
  * Tek bir widget'ın renk / saydamlık ayarı.
@@ -88,11 +91,22 @@ private fun ConfigScreen(id: Int, provider: String?, onDone: () -> Unit) {
     var custom by remember { mutableStateOf(WidgetStyle.hasCustom(ctx, id)) }
     var st by remember { mutableStateOf(WidgetStyle.load(ctx, id)) }
 
+    // Kaydırıcıyı sürüklerken her karede widget'ı yeniden çizmek menüyü kasıyordu:
+    // renk hemen saklanır (hafif), ana ekrandaki widget ise kısa bir bekleme sonrası bir kez güncellenir.
+    var rev by remember { mutableIntStateOf(0) }
+    LaunchedEffect(rev) {
+        if (rev > 0) {
+            delay(250)
+            WidgetUi.updateOne(ctx, id)
+        }
+    }
+    val preview = remember { WidgetUi.previewData(ctx) }
+
     fun change(n: WStyle) {
         st = n
         custom = true
         WidgetStyle.saveFor(ctx, id, n)
-        WidgetUi.updateOne(ctx, id)
+        rev++
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -117,7 +131,7 @@ private fun ConfigScreen(id: Int, provider: String?, onDone: () -> Unit) {
 
             // Önizleme
             Text("Önizleme", Modifier.padding(top = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
-            val bmp = remember(st) { WidgetUi.previewBitmap(ctx, provider, st) }
+            val bmp = remember(st) { WidgetUi.previewBitmap(provider, st, preview) }
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(12.dp),
@@ -158,12 +172,17 @@ private fun ConfigScreen(id: Int, provider: String?, onDone: () -> Unit) {
                         custom = false
                         st = WidgetStyle.load(ctx, id)
                         WidgetUi.updateOne(ctx, id)
-                    }
+                    },
+                    Modifier.weight(1f)
                 )
-                PlayButton(onClick = {
-                    WidgetUi.updateOne(ctx, id)
-                    onDone()
-                }, label = "Tamam")
+                PlayButton(
+                    onClick = {
+                        WidgetUi.updateOne(ctx, id)
+                        onDone()
+                    },
+                    modifier = Modifier.weight(1f),
+                    label = "Tamam"
+                )
             }
             Text(
                 "\"Varsayılana sıfırla\" bu widget'a verdiğin rengi siler; widget, Ayarlar'daki varsayılan renklere döner.",
