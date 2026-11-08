@@ -1,8 +1,10 @@
 package com.gamelauncher.app
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -50,6 +52,40 @@ class AppState(private val ctx: Context) {
     var sort by mutableStateOf(
         runCatching { SortMode.valueOf(prefs.getString("sort", "MANUAL")!!) }.getOrDefault(SortMode.MANUAL)
     )
+
+    var iconMode by mutableIntStateOf(prefs.getInt("icon_mode", 0)) // 0 temaya göre, 1 beyaz, 2 siyah
+
+    /** Uygulama simgesi koyu mu olacak? Temaya göre modunda: Sistem → telefon modu, Açık → beyaz, Koyu/AMOLED → siyah. */
+    fun iconIsDark(sysDark: Boolean): Boolean = when (iconMode) {
+        1 -> false
+        2 -> true
+        else -> when (themeMode) { 1 -> false; 2, 3 -> true; else -> sysDark }
+    }
+
+    fun setIconMode(v: Int) { iconMode = v; prefs.edit().putInt("icon_mode", v).apply() }
+
+    /** Ana ekran simgesini değiştirir (activity-alias). Zaten doğruysa dokunmaz. */
+    fun applyIcon(sysDark: Boolean) {
+        val pm = ctx.packageManager
+        val light = ComponentName(ctx.packageName, "com.gamelauncher.app.IconLight")
+        val dark = ComponentName(ctx.packageName, "com.gamelauncher.app.IconDark")
+        fun on(c: ComponentName, default: Boolean): Boolean = when (pm.getComponentEnabledSetting(c)) {
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> default
+            else -> false
+        }
+        val wantDark = iconIsDark(sysDark)
+        if (on(dark, false) == wantDark && on(light, true) == !wantDark) return
+        fun set(c: ComponentName, enable: Boolean) = pm.setComponentEnabledSetting(
+            c,
+            if (enable) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        runCatching {
+            // Önce yenisini aç, sonra eskisini kapat: simge hiç kaybolmasın
+            if (wantDark) { set(dark, true); set(light, false) } else { set(light, true); set(dark, false) }
+        }
+    }
 
     fun setTheme(v: Int) { themeMode = v; prefs.edit().putInt("theme", v).apply() }
     @JvmName("applyAccent") fun setAccent(v: Int) { accent = v; prefs.edit().putInt("accent", v).apply() }

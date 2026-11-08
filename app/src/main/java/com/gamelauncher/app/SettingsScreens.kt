@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -72,6 +73,28 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
 
             Text("Tema", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
             SegmentedChoice(listOf("Sistem", "Açık", "Koyu", "AMOLED"), s.themeMode) { s.setTheme(it) }
+
+            Text("Uygulama simgesi", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
+            SegmentedChoice(listOf("Temaya göre", "Beyaz", "Siyah"), s.iconMode) { s.setIconMode(it) }
+            val activeDark = s.iconIsDark(androidx.compose.foundation.isSystemInDarkTheme())
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                listOf(false to R.drawable.logo_light, true to R.drawable.logo_dark).forEach { (isDark, res) ->
+                    androidx.compose.foundation.Image(
+                        painterResource(res), if (isDark) "Siyah simge" else "Beyaz simge",
+                        Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))
+                            .then(
+                                if (activeDark == isDark) Modifier.border(BorderStroke(3.dp, MaterialTheme.colorScheme.primary), RoundedCornerShape(14.dp))
+                                else Modifier
+                            )
+                    )
+                }
+            }
+            Text(
+                "Simge, uygulama açıldığında güncellenir; bazı ana ekranlarda değişmesi birkaç saniye sürebilir.",
+                Modifier.padding(top = 6.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             if (android.os.Build.VERSION.SDK_INT >= 31) {
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
