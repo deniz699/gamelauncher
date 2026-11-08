@@ -194,7 +194,7 @@ fun App(s: AppState) {
             )
             }
         }
-        if (showSettings) SettingsPage(s, onDevice = { showDevice = true }) { showSettings = false }
+        if (showSettings) SettingsPage(s) { showSettings = false }
         if (showDevice) DevicePage { showDevice = false }
     }
 
@@ -481,7 +481,7 @@ fun StatsTab(s: AppState) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SettingsPage(s: AppState, onDevice: () -> Unit, onClose: () -> Unit) {
+fun SettingsPage(s: AppState, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) s.setBackground(uri)
@@ -544,11 +544,6 @@ fun SettingsPage(s: AppState, onDevice: () -> Unit, onClose: () -> Unit) {
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Arka planı bulanıklaştır", Modifier.weight(1f))
                 Switch(checked = s.bgBlur, onCheckedChange = { s.changeBgBlur(it) })
-            }
-
-            Text("Cihaz", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
-            OutlinedButton(onClick = onDevice) {
-                Icon(Icons.Default.PhoneAndroid, null); Spacer(Modifier.width(6.dp)); Text("Cihaz bilgileri")
             }
 
             Text("Süre takibi", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
