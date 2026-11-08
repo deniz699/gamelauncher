@@ -27,7 +27,7 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher_white"
+        android:icon="@drawable/ic_launcher_white"
         android:label="Game Launcher"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity
@@ -41,7 +41,7 @@
             android:targetActivity=".MainActivity"
             android:enabled="true"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_white"
+            android:icon="@drawable/ic_launcher_white"
             android:label="Game Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -53,7 +53,7 @@
             android:targetActivity=".MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_black"
+            android:icon="@drawable/ic_launcher_black"
             android:label="Game Launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
