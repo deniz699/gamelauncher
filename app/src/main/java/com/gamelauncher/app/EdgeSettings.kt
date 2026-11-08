@@ -112,8 +112,8 @@ fun EdgePanelSettings() {
 
     Text("Panele uygulama ekle", Modifier.padding(top = 14.dp), style = MaterialTheme.typography.bodyMedium)
     Text(
-        if (apps.isEmpty()) "Şimdilik yalnızca oyunların görünüyor. İstediğin uygulamaları (tarayıcı, mesajlaşma, not vb.) panele ekleyebilirsin."
-        else "${apps.size} uygulama panelde, oyunların altında görünür.",
+        if (apps.isEmpty()) "Panelde yalnızca burada seçtiklerin görünür. Oyun, tarayıcı, mesajlaşma, not… istediğin uygulamayı ekleyebilirsin."
+        else "${apps.size} uygulama panelde görünüyor.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )

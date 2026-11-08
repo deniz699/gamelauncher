@@ -291,32 +291,24 @@ class EdgeService : Service() {
         val centerY = EdgePrefs.yFrac(this) * sh
         removeHandle()
 
-        val games = Store(this).loadGames().filter { it.pkg != fg }
-        val gamePkgs = games.map { it.pkg }.toSet()
+        // Panelde yalnızca Ayarlar > Kenar paneli > "Uygulama seç" ile eklenenler görünür
         val pm = packageManager
-        val extra = EdgePrefs.apps(this)
-            .filter { it != fg && it !in gamePkgs && pm.getLaunchIntentForPackage(it) != null }
+        val apps = EdgePrefs.apps(this)
+            .filter { it != fg && pm.getLaunchIntentForPackage(it) != null }
             .map { pkg -> pkg to (runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)) }
 
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((6 * d).toInt(), (10 * d).toInt(), (6 * d).toInt(), (10 * d).toInt())
         }
-        games.forEach { list.addView(appItem(it.pkg, it.name)) }
-        if (games.isNotEmpty() && extra.isNotEmpty()) {
-            list.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
-                LinearLayout.LayoutParams((40 * d).toInt(), (1 * d).toInt()).apply {
-                    gravity = Gravity.CENTER_HORIZONTAL
-                    topMargin = (4 * d).toInt(); bottomMargin = (4 * d).toInt()
-                })
-        }
-        extra.forEach { (pkg, name) -> list.addView(appItem(pkg, name)) }
-        if (games.isEmpty() && extra.isEmpty()) {
+        apps.forEach { (pkg, name) -> list.addView(appItem(pkg, name)) }
+        if (apps.isEmpty()) {
             list.addView(TextView(this).apply {
-                text = "Başka oyun yok"
+                text = "Panele uygulama eklenmemiş"
                 setTextColor(0xB3FFFFFF.toInt())
                 textSize = 11f
                 gravity = Gravity.CENTER
+                setPadding((4 * d).toInt(), 0, (4 * d).toInt(), 0)
             })
         }
 

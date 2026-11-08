@@ -552,7 +552,7 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text("Kenar panelini aç")
                     Text(
-                        "Oyundayken ekranın kenarında küçük bir çizgi çıkar. Dokununca ya da sağa kaydırınca oyunlarına kısayollar açılır; kısayola dokunmak oyunu açılır pencerede (cihaz destekliyorsa) başlatır, uzun basmak normal açar. \"Diğer uygulamaların üzerinde göster\" ve kullanım erişimi izni gerekir; izni verip geri dönünce anahtarı tekrar aç.",
+                        "Oyundayken ekranın kenarında küçük bir çizgi çıkar. Dokununca ya da içeri kaydırınca seçtiğin uygulamaların kısayolları açılır (uygulamaları aşağıdan seç); kısayola dokunmak uygulamayı açılır pencerede (cihaz destekliyorsa) başlatır, uzun basmak normal açar. \"Diğer uygulamaların üzerinde göster\" ve kullanım erişimi izni gerekir; izni verip geri dönünce anahtarı tekrar aç.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
