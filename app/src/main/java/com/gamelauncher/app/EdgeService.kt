@@ -460,24 +460,6 @@ class EdgeService : Service() {
             orientation = LinearLayout.VERTICAL
             setPadding((6 * d).toInt(), (10 * d).toInt(), (6 * d).toInt(), (10 * d).toInt())
         }
-        // RAM temizle düğmesi
-        val cleanLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (30 * d).toInt()).apply {
-            setMargins((4 * d).toInt(), (3 * d).toInt(), (4 * d).toInt(), (3 * d).toInt())
-        }
-        list.addView(TextView(this).apply {
-            text = "⚡ Temizle"
-            textSize = 11f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(0xFF201F27.toInt())
-            background = GradientDrawable().apply { setColor(0xFFFFD54F.toInt()); cornerRadius = 12 * d }
-            isClickable = true
-            setOnClickListener {
-                Booster.clean(this@EdgeService, setOfNotNull(fg)) {
-                    android.widget.Toast.makeText(this@EdgeService, it, android.widget.Toast.LENGTH_SHORT).show()
-                }
-            }
-        }, cleanLp)
         // Oyun içi bilgi düğmeleri
         val tl = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (30 * d).toInt()).apply {
             setMargins((4 * d).toInt(), (3 * d).toInt(), (4 * d).toInt(), (3 * d).toInt())
