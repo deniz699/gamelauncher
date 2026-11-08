@@ -2,6 +2,7 @@ package com.gamelauncher.app
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -12,7 +13,23 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.File
-import kotlin.concurrent.thread
+import java.util.concurrent.Executors
+
+/** Telefonda yüklü, kategorisi "oyun" olan başlatılabilir uygulamalar (pkg to ad). */
+@Suppress("DEPRECATION")
+fun detectInstalledGames(ctx: Context): List<Pair<String, String>> {
+    val pm = ctx.packageManager
+    val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+    return pm.queryIntentActivities(i, 0)
+        .filter {
+            val ai = it.activityInfo.applicationInfo
+            ai.category == ApplicationInfo.CATEGORY_GAME || (ai.flags and ApplicationInfo.FLAG_IS_GAME) != 0
+        }
+        .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
+        .distinctBy { it.first }
+        .filter { it.first != ctx.packageName }
+        .sortedBy { it.second.lowercase() }
+}
 
 class AppState(private val ctx: Context) {
     private val store = Store(ctx)
@@ -49,17 +66,43 @@ class AppState(private val ctx: Context) {
         store.saveGames(games)
     }
 
-    fun add(pkg: String, name: String) {
-        if (games.any { it.pkg == pkg }) return
-        games = games + Game(pkg, name, addedAt = System.currentTimeMillis())
+    private fun hidden(): Set<String> = prefs.getStringSet("hidden", emptySet()) ?: emptySet()
+    private fun setHidden(v: Set<String>) { prefs.edit().putStringSet("hidden", v).apply() }
+
+    /** Yalnızca oyun olarak algılanan uygulamalar eklenir. */
+    private fun addMany(list: List<Pair<String, String>>) {
+        val known = games.map { it.pkg }.toSet()
+        val now = System.currentTimeMillis()
+        val fresh = list.filter { it.first !in known }
+        if (fresh.isEmpty()) return
+        games = games + fresh.mapIndexed { idx, (pkg, name) -> Game(pkg, name, addedAt = now + idx) }
         store.saveGames(games)
         // Son 7 günün geçmişini geri doldur (Android bu kadarını tutuyor)
         hasUsage = UsageSync.hasPermission(ctx)
         if (hasUsage) {
-            val (s, _) = UsageSync.collect(ctx, setOf(pkg), System.currentTimeMillis() - 7 * 86_400_000L)
+            val (s, _) = UsageSync.collect(ctx, fresh.map { it.first }.toSet(), now - 7 * 86_400_000L)
             mergeSessions(s)
         }
         fetchCovers()
+    }
+
+    /** Yüklü oyunları kendiliğinden ekler (kullanıcının listeden kaldırdıkları hariç). */
+    fun autoAddGames() {
+        val skip = hidden()
+        addMany(detectInstalledGames(ctx).filter { it.first !in skip })
+    }
+
+    /** Listeden kaldırılmış (veya henüz eklenmemiş) oyunlar */
+    fun addableGames(): List<Pair<String, String>> {
+        val have = games.map { it.pkg }.toSet()
+        return detectInstalledGames(ctx).filter { it.first !in have }
+    }
+
+    fun add(pkg: String, name: String) {
+        // Oyun olmayan hiçbir şey eklenemez
+        if (detectInstalledGames(ctx).none { it.first == pkg }) return
+        setHidden(hidden() - pkg)
+        addMany(listOf(pkg to name))
     }
 
     fun remove(pkg: String) {
@@ -67,6 +110,7 @@ class AppState(private val ctx: Context) {
             g.cover?.let { File(it).delete() }
             g.autoCover?.let { File(it).delete() }
         }
+        setHidden(hidden() + pkg)
         games = games.filter { it.pkg != pkg }
         sessions = sessions.filter { it.pkg != pkg }
         store.saveGames(games); store.saveSessions(sessions)
@@ -127,6 +171,7 @@ class AppState(private val ctx: Context) {
 
     /** Uygulama her öne geldiğinde çağrılır */
     fun sync() {
+        autoAddGames()
         fetchCovers()
         hasUsage = UsageSync.hasPermission(ctx)
         if (!hasUsage) return
@@ -139,6 +184,7 @@ class AppState(private val ctx: Context) {
     // ---------- İnternetten otomatik kapak ----------
     private val mainHandler = Handler(Looper.getMainLooper())
     private val fetching = HashSet<String>()
+    private val pool = Executors.newFixedThreadPool(3)
 
     /** Kapağı olmayan oyunlar için internetten görsel çeker; internet yoksa uygulama simgesi kalır. */
     fun fetchCovers() {
@@ -146,7 +192,7 @@ class AppState(private val ctx: Context) {
         games.filter { it.cover == null && it.autoCover == null }.forEach { g ->
             if (now - prefs.getLong("tried_${g.pkg}", 0L) < 6 * 3_600_000L) return@forEach
             if (!fetching.add(g.pkg)) return@forEach
-            thread {
+            pool.execute {
                 var bytes: ByteArray? = null
                 var reachable = true
                 try {

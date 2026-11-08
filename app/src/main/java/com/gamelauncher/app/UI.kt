@@ -10,6 +10,13 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,6 +57,8 @@ fun App(s: AppState) {
     var sortMenu by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<String?>(null) }
     val ctx = LocalContext.current
+    val backdrop = rememberGlassBackdrop()
+    val bg = MaterialTheme.colorScheme.background
 
     val tabs: List<Pair<String, ImageVector>> = listOf(
         "Tümü" to Icons.Default.SportsEsports,
@@ -84,6 +93,7 @@ fun App(s: AppState) {
         }
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding())) {
+            Box(Modifier.fillMaxSize().glassSource(backdrop, bg)) {
             Column(Modifier.fillMaxSize()) {
                 if (!s.hasUsage) {
                     Card(Modifier.fillMaxWidth().padding(12.dp, 8.dp)) {
@@ -99,7 +109,7 @@ fun App(s: AppState) {
                     }
                 }
                 when (tab) {
-                    0 -> GameGrid(s, s.sortedGames(), "Henüz oyun yok. Sağ alttaki + ile oyun ekle.") { selected = it }
+                    0 -> GameGrid(s, s.sortedGames(), "Oyun bulunamadı. Telefondaki oyunlar otomatik eklenir.") { selected = it }
                     1 -> GameGrid(s, s.sortedGames().filter { it.favorite }, "Favori oyun yok. Kalbe dokunarak ekle.") { selected = it }
                     else -> StatsTab(s)
                 }
@@ -112,12 +122,14 @@ fun App(s: AppState) {
                         .padding(end = 24.dp, bottom = 104.dp)
                 ) { Icon(Icons.Default.Add, "Oyun ekle") }
             }
+            }
 
             GlassBottomBar(
                 items = tabs,
                 selected = tab,
                 glass = s.glass,
                 onSelect = { tab = it },
+                backdrop = backdrop,
                 modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
                     .padding(horizontal = 24.dp, vertical = 14.dp)
                     .widthIn(max = 420.dp).fillMaxWidth().height(64.dp)
@@ -165,14 +177,10 @@ fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) 
                         g.name, Modifier.padding(12.dp, 8.dp, 12.dp, 4.dp),
                         maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold
                     )
-                    Button(
+                    PlayButton(
                         onClick = { s.launch(g.pkg) },
                         modifier = Modifier.fillMaxWidth().padding(12.dp, 0.dp, 12.dp, 12.dp)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Oyna")
-                    }
+                    )
                 }
             }
         }
@@ -208,33 +216,28 @@ fun Cover(g: Game, modifier: Modifier, iconFraction: Float = 0.5f) {
 
 // ---------------------------------------------------------------- Oyun ekle
 
-private data class AppEntry(val pkg: String, val name: String, val isGame: Boolean)
+private data class AppEntry(val pkg: String, val name: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSheet(s: AppState, onClose: () -> Unit) {
     val ctx = LocalContext.current
     var query by remember { mutableStateOf("") }
-    val all = remember {
-        val pm = ctx.packageManager
-        val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        pm.queryIntentActivities(i, 0)
-            .map {
-                AppEntry(
-                    it.activityInfo.packageName, it.loadLabel(pm).toString(),
-                    it.activityInfo.applicationInfo.category == ApplicationInfo.CATEGORY_GAME
-                )
-            }
-            .distinctBy { it.pkg }
-            .filter { it.pkg != ctx.packageName }
-            .sortedWith(compareByDescending<AppEntry> { it.isGame }.thenBy { it.name.lowercase() })
-    }
+    // Yalnızca oyun kategorisindeki uygulamalar listelenir; oyun dışı hiçbir şey eklenemez.
+    val all = remember { detectInstalledGames(ctx).map { AppEntry(it.first, it.second) } }
     val added = s.games.map { it.pkg }.toSet()
     val shown = all.filter { it.pkg !in added && it.name.contains(query, ignoreCase = true) }
 
     ModalBottomSheet(onDismissRequest = onClose) {
         Column(Modifier.fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {
             Text("Oyun ekle", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Yalnızca oyunlar listelenir. Yeni yüklenen oyunlar otomatik eklenir; buradan kaldırdıklarını geri ekleyebilirsin.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (shown.isEmpty()) {
+                Text("Eklenebilecek oyun yok.", Modifier.padding(vertical = 24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
                 label = { Text("Ara") }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
@@ -245,14 +248,13 @@ fun AddSheet(s: AppState, onClose: () -> Unit) {
                         runCatching { ctx.packageManager.getApplicationIcon(a.pkg).toBitmap(96, 96).asImageBitmap() }.getOrNull()
                     }
                     Row(
-                        Modifier.fillMaxWidth().clickable { s.add(a.pkg, a.name) }.padding(vertical = 8.dp),
+                        Modifier.fillMaxWidth().clickable { s.add(a.pkg, a.name); onClose() }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (icon != null) Image(icon, null, Modifier.size(44.dp))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(a.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (a.isGame) Text("Oyun", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
                         Icon(Icons.Default.Add, "Ekle")
                     }
@@ -284,9 +286,7 @@ fun DetailSheet(s: AppState, pkg: String, onClose: () -> Unit) {
                 Cover(g, Modifier.fillMaxSize())
             }
             Text(g.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 12.dp))
-            Button(onClick = { s.launch(pkg) }, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Oyna")
-            }
+            PlayButton(onClick = { s.launch(pkg) }, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp))
 
             InfoRow("Telefona yüklenme", fmtDate(installed))
             InfoRow("Listeye eklenme", fmtDate(g.addedAt))
@@ -429,5 +429,31 @@ fun SettingsSheet(s: AppState, onClose: () -> Unit) {
                 modifier = Modifier.padding(top = 8.dp)
             ) { Text("Kullanım erişimi ayarlarını aç") }
         }
+    }
+}
+
+// ---------------------------------------------------------------- Oyna butonu
+
+/** Düz (flat) renkli, gölgesiz, ripple'sız; basınca yumuşakça küçülüp rengi açılır. */
+@Composable
+fun PlayButton(onClick: () -> Unit, modifier: Modifier = Modifier, label: String = "Oyna") {
+    val src = remember { MutableInteractionSource() }
+    val down by src.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (down) 0.95f else 1f, spring(dampingRatio = 0.65f, stiffness = 420f), label = "playScale")
+    val base = MaterialTheme.colorScheme.primary
+    val bg by animateColorAsState(if (down) base.copy(alpha = 0.82f) else base, tween(160), label = "playBg")
+    Row(
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(14.dp))
+            .background(bg)
+            .clickable(interactionSource = src, indication = null, onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.onPrimary)
+        Spacer(Modifier.width(4.dp))
+        Text(label, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold)
     }
 }
