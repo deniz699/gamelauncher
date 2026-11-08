@@ -90,7 +90,7 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
                 }
             }
             Text(
-                "Simge, uygulama açıldığında güncellenir; bazı ana ekranlarda değişmesi birkaç saniye sürebilir.",
+                "Simge, uygulamadan çıkınca (ana ekrana dönünce) güncellenir; Android ekrandayken değiştirirse uygulamayı kapatır. Bazı ana ekranlarda değişmesi birkaç saniye sürebilir.",
                 Modifier.padding(top = 6.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

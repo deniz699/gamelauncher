@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -64,28 +65,8 @@ class AppState(private val ctx: Context) {
 
     @JvmName("applyIconMode") fun setIconMode(v: Int) { iconMode = v; prefs.edit().putInt("icon_mode", v).apply() }
 
-    /** Ana ekran simgesini değiştirir (activity-alias). Zaten doğruysa dokunmaz. */
-    fun applyIcon(sysDark: Boolean) {
-        val pm = ctx.packageManager
-        val light = ComponentName(ctx.packageName, "com.gamelauncher.app.IconLight")
-        val dark = ComponentName(ctx.packageName, "com.gamelauncher.app.IconDark")
-        fun on(c: ComponentName, default: Boolean): Boolean = when (pm.getComponentEnabledSetting(c)) {
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
-            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> default
-            else -> false
-        }
-        val wantDark = iconIsDark(sysDark)
-        if (on(dark, false) == wantDark && on(light, true) == !wantDark) return
-        fun set(c: ComponentName, enable: Boolean) = pm.setComponentEnabledSetting(
-            c,
-            if (enable) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP
-        )
-        runCatching {
-            // Önce yenisini aç, sonra eskisini kapat: simge hiç kaybolmasın
-            if (wantDark) { set(dark, true); set(light, false) } else { set(light, true); set(dark, false) }
-        }
-    }
+    /** Ana ekran simgesini şimdi eşitler (uygulama açıkken çağrılırsa Android uygulamayı kapatabilir; bu yüzden onStop'ta çağrılır). */
+    fun applyIcon() = IconSwitcher.sync(ctx)
 
     fun setTheme(v: Int) { themeMode = v; prefs.edit().putInt("theme", v).apply() }
     @JvmName("applyAccent") fun setAccent(v: Int) { accent = v; prefs.edit().putInt("accent", v).apply() }
@@ -302,6 +283,38 @@ class AppState(private val ctx: Context) {
             f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
             games.find { it.pkg == pkg }?.autoCover?.let { File(it).delete() }
             update(pkg) { it.copy(autoCover = f.absolutePath) }
+        }
+    }
+}
+
+
+/** Ana ekran simgesi: iki activity-alias'tan yalnızca biri açık tutulur. */
+object IconSwitcher {
+    fun sync(ctx: Context) {
+        val p = ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        val sysDark = (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val wantDark = when (p.getInt("icon_mode", 0)) {
+            1 -> false
+            2 -> true
+            else -> when (p.getInt("theme", 0)) { 1 -> false; 2, 3 -> true; else -> sysDark }
+        }
+        val pm = ctx.packageManager
+        val light = ComponentName(ctx.packageName, "com.gamelauncher.app.IconLight")
+        val dark = ComponentName(ctx.packageName, "com.gamelauncher.app.IconDark")
+        fun on(c: ComponentName, default: Boolean): Boolean = when (pm.getComponentEnabledSetting(c)) {
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> default
+            else -> false
+        }
+        if (on(dark, false) == wantDark && on(light, true) == !wantDark) return
+        fun set(c: ComponentName, enable: Boolean) = pm.setComponentEnabledSetting(
+            c,
+            if (enable) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        runCatching {
+            // Önce yenisini aç, sonra eskisini kapat: simge hiç kaybolmasın
+            if (wantDark) { set(dark, true); set(light, false) } else { set(light, true); set(dark, false) }
         }
     }
 }
