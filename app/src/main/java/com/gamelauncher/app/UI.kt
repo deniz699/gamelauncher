@@ -552,7 +552,7 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text("Kenar panelini aç")
                     Text(
-                        "Oyundayken ekranın solunda küçük bir çizgi çıkar. Dokununca ya da sağa kaydırınca oyunlarına kısayollar açılır; kısayola dokunmak oyunu açılır pencerede (cihaz destekliyorsa) başlatır, uzun basmak normal açar. \"Diğer uygulamaların üzerinde göster\" ve kullanım erişimi izni gerekir; izni verip geri dönünce anahtarı tekrar aç.",
+                        "Oyundayken ekranın kenarında küçük bir çizgi çıkar. Dokununca ya da sağa kaydırınca oyunlarına kısayollar açılır; kısayola dokunmak oyunu açılır pencerede (cihaz destekliyorsa) başlatır, uzun basmak normal açar. \"Diğer uygulamaların üzerinde göster\" ve kullanım erişimi izni gerekir; izni verip geri dönünce anahtarı tekrar aç.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -569,6 +569,8 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                     }
                 })
             }
+
+            EdgePanelSettings()
 
             Text("Süre takibi", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
             Text(

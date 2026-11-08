@@ -11,4 +11,6 @@
     android:initialLayout="@layout/widget_temps"
     android:previewImage="@drawable/preview_temps"
     android:resizeMode="horizontal|vertical"
-    android:widgetCategory="home_screen" />
+    android:widgetCategory="home_screen"
+    android:configure="com.gamelauncher.app.WidgetConfigActivity"
+    android:widgetFeatures="reconfigurable" />

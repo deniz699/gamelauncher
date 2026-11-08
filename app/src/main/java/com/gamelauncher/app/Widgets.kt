@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
@@ -25,6 +26,8 @@ import kotlin.math.sqrt
 // ------------------------------------------------------------------ Sağlayıcılar
 
 class GamesWidget : AppWidgetProvider() {
+    override fun onDeleted(context: Context, ids: IntArray) { ids.forEach { WidgetStyle.clearFor(context, it) } }
+
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
         ids.forEach { mgr.updateAppWidget(it, WidgetUi.games(context, mgr, it)) }
         mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
@@ -37,6 +40,8 @@ class GamesWidget : AppWidgetProvider() {
 }
 
 class TempWidget : AppWidgetProvider() {
+    override fun onDeleted(context: Context, ids: IntArray) { ids.forEach { WidgetStyle.clearFor(context, it) } }
+
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
         ids.forEach { mgr.updateAppWidget(it, WidgetUi.temps(context, mgr, it)) }
     }
@@ -47,6 +52,8 @@ class TempWidget : AppWidgetProvider() {
 }
 
 class InfoWidget : AppWidgetProvider() {
+    override fun onDeleted(context: Context, ids: IntArray) { ids.forEach { WidgetStyle.clearFor(context, it) } }
+
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
         ids.forEach { mgr.updateAppWidget(it, WidgetUi.info(context, mgr, it)) }
     }
@@ -59,20 +66,20 @@ class InfoWidget : AppWidgetProvider() {
 // ------------------------------------------------------------------ Kaydırılabilir oyun listesi
 
 class GamesListService : RemoteViewsService() {
-    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = GamesFactory(applicationContext)
+    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = GamesFactory(applicationContext, intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 0))
 }
 
-private class GamesFactory(private val ctx: Context) : RemoteViewsService.RemoteViewsFactory {
+private class GamesFactory(private val ctx: Context, private val widgetId: Int) : RemoteViewsService.RemoteViewsFactory {
     private data class Row(val pkg: String, val name: String, val time: String)
 
     private var rows: List<Row> = emptyList()
-    private var style: WStyle = WidgetStyle.load(ctx)
+    private var style: WStyle = WidgetStyle.load(ctx, widgetId)
 
     override fun onCreate() {}
     override fun onDestroy() {}
 
     override fun onDataSetChanged() {
-        style = WidgetStyle.load(ctx)
+        style = WidgetStyle.load(ctx, widgetId)
         val store = Store(ctx)
         val sessions = store.loadSessions()
         rows = store.loadGames()
@@ -118,6 +125,43 @@ object WidgetUi {
             mgr.getAppWidgetIds(ComponentName(ctx, InfoWidget::class.java))
                 .forEach { mgr.updateAppWidget(it, info(ctx, mgr, it)) }
         }
+    }
+
+    /** Tek bir widget'ı yeniler (ayar ekranından). */
+    fun updateOne(ctx: Context, id: Int) {
+        runCatching {
+            val mgr = AppWidgetManager.getInstance(ctx)
+            when (mgr.getAppWidgetInfo(id)?.provider?.className) {
+                GamesWidget::class.java.name -> {
+                    mgr.updateAppWidget(id, games(ctx, mgr, id))
+                    mgr.notifyAppWidgetViewDataChanged(intArrayOf(id), R.id.list)
+                }
+                TempWidget::class.java.name -> mgr.updateAppWidget(id, temps(ctx, mgr, id))
+                InfoWidget::class.java.name -> mgr.updateAppWidget(id, info(ctx, mgr, id))
+            }
+        }
+    }
+
+    /** Ayar ekranındaki önizleme (sıcaklık ve telefon özeti widget'ları için). */
+    fun previewBitmap(ctx: Context, provider: String?, st: WStyle): Bitmap? = when (provider) {
+        TempWidget::class.java.name -> WidgetGfx.tempsBitmap(540, 270, st, batteryTemp(ctx), cpuTempC())
+        InfoWidget::class.java.name -> WidgetGfx.infoBitmap(280f, 150f, 2.5f, st, infoData(ctx))
+        else -> null
+    }
+
+    private fun infoData(ctx: Context): WidgetGfx.InfoData {
+        val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val mi = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        val stat = StatFs(Environment.getDataDirectory().path)
+        val total = stat.blockCountLong * stat.blockSizeLong
+        val free = stat.availableBlocksLong * stat.blockSizeLong
+        return WidgetGfx.InfoData(
+            model = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
+            sys = "Android ${Build.VERSION.RELEASE} • SDK ${Build.VERSION.SDK_INT}",
+            ramUsed = mi.totalMem - mi.availMem, ramTotal = mi.totalMem,
+            stoUsed = total - free, stoTotal = total,
+            battery = batteryTemp(ctx), cpu = cpuTempC()
+        )
     }
 
     private fun openApp(ctx: Context): PendingIntent =
@@ -176,7 +220,7 @@ object WidgetUi {
 
     fun games(ctx: Context, mgr: AppWidgetManager, id: Int): RemoteViews {
         val rv = RemoteViews(ctx.packageName, R.layout.widget_games)
-        val st = WidgetStyle.load(ctx)
+        val st = WidgetStyle.load(ctx, id)
         val store = Store(ctx)
         val games = store.loadGames()
         val sessions = store.loadSessions()
@@ -211,7 +255,7 @@ object WidgetUi {
 
     fun temps(ctx: Context, mgr: AppWidgetManager, id: Int): RemoteViews {
         val rv = RemoteViews(ctx.packageName, R.layout.widget_temps)
-        val st = WidgetStyle.load(ctx)
+        val st = WidgetStyle.load(ctx, id)
         val (wd, hd) = sizeDp(ctx, mgr, id)
         val wDp = if (wd > 0) wd else 160
         // Pill en fazla 1 hücre kalınlığında (~68dp) çizilir; widget daha uzunsa dikeyde ortalanır
@@ -229,20 +273,8 @@ object WidgetUi {
 
     fun info(ctx: Context, mgr: AppWidgetManager, id: Int): RemoteViews {
         val rv = RemoteViews(ctx.packageName, R.layout.widget_info)
-        val st = WidgetStyle.load(ctx)
-        val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val mi = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
-        val stat = StatFs(Environment.getDataDirectory().path)
-        val total = stat.blockCountLong * stat.blockSizeLong
-        val free = stat.availableBlocksLong * stat.blockSizeLong
-
-        val data = WidgetGfx.InfoData(
-            model = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
-            sys = "Android ${Build.VERSION.RELEASE} • SDK ${Build.VERSION.SDK_INT}",
-            ramUsed = mi.totalMem - mi.availMem, ramTotal = mi.totalMem,
-            stoUsed = total - free, stoTotal = total,
-            battery = batteryTemp(ctx), cpu = cpuTempC()
-        )
+        val st = WidgetStyle.load(ctx, id)
+        val data = infoData(ctx)
 
         val (wd, hd) = sizeDp(ctx, mgr, id)
         val wDp = if (wd > 0) wd else 280

@@ -10,4 +10,6 @@
     android:initialLayout="@layout/widget_games"
     android:previewImage="@drawable/preview_games"
     android:resizeMode="horizontal|vertical"
-    android:widgetCategory="home_screen" />
+    android:widgetCategory="home_screen"
+    android:configure="com.gamelauncher.app.WidgetConfigActivity"
+    android:widgetFeatures="reconfigurable" />

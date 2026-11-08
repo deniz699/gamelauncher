@@ -20,6 +20,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -30,6 +31,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Oyun içindeyken ekranın solunda küçük bir çizgi (tutamaç) gösterir.
@@ -45,6 +47,7 @@ class EdgeService : Service() {
     private var fg: String? = null
     private var gamePkgs: Set<String> = emptySet()
     private var counter = 0
+    private var handleSig = ""
     private val density get() = resources.displayMetrics.density
 
     private val poll = object : Runnable {
@@ -115,11 +118,23 @@ class EdgeService : Service() {
         runCatching { pollForeground() }
         val cur = fg
         val show = cur != null && cur in gamePkgs
+        if (show && handleView != null && handleSig != edgeSig()) removeHandle()   // ayar değişti: yeniden çiz
         if (show && handleView == null && panelView == null) addHandle()
         if (!show) { removeHandle(); closePanel() }
     }
 
-    // ------------------------------------------------ Tutamaç (sol kenardaki çizgi)
+    // ------------------------------------------------ Tutamaç (kenardaki çizgi)
+
+    private fun edgeSig() = "${EdgePrefs.side(this)}/${EdgePrefs.lenDp(this)}/${EdgePrefs.yFrac(this)}"
+
+    private fun screenSize(): Pair<Int, Int> =
+        if (Build.VERSION.SDK_INT >= 30) {
+            val b = wm.currentWindowMetrics.bounds
+            b.width() to b.height()
+        } else {
+            val dm = resources.displayMetrics
+            dm.widthPixels to dm.heightPixels
+        }
 
     private fun overlayParams(w: Int, h: Int, flags: Int) = WindowManager.LayoutParams(
         w, h, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -127,32 +142,94 @@ class EdgeService : Service() {
         PixelFormat.TRANSLUCENT
     )
 
+    private fun sideGravity(side: Int) = if (side == 1) Gravity.END else Gravity.START
+
     private fun addHandle() {
         val d = density
+        val (sw, sh) = screenSize()
+        var side = EdgePrefs.side(this)
+        val barLen = (EdgePrefs.lenDp(this) * d).toInt()
+        val w = (28 * d).toInt()
+        val h = barLen + (36 * d).toInt()          // çizginin üstünde/altında tutması kolay boşluk
+
         val v = FrameLayout(this)
-        val bar = View(this).apply {
-            background = GradientDrawable().apply {
-                setColor(0xB3FFFFFF.toInt())
-                cornerRadius = 4 * d
-            }
+        val barBg = GradientDrawable().apply {
+            setColor(0xB3FFFFFF.toInt())
+            cornerRadius = 4 * d
         }
-        v.addView(bar, FrameLayout.LayoutParams((5 * d).toInt(), (84 * d).toInt(), Gravity.START or Gravity.CENTER_VERTICAL))
+        val bar = View(this).apply { background = barBg }
+        val barLp = FrameLayout.LayoutParams((5 * d).toInt(), barLen, sideGravity(side) or Gravity.CENTER_VERTICAL)
+        v.addView(bar, barLp)
+
+        val lp = overlayParams(
+            w, h,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        ).apply {
+            gravity = Gravity.TOP or sideGravity(side)
+            y = (EdgePrefs.yFrac(this@EdgeService) * sh - h / 2f).roundToInt().coerceIn(0, (sh - h).coerceAtLeast(0))
+        }
 
         var downX = 0f
+        var downY = 0f
+        var moving = false
+        val longPress = Runnable {
+            moving = true
+            barBg.setColor(0xFFBFA8FF.toInt())
+            bar.scaleX = 1.8f
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
+
+        fun place(ev: MotionEvent) {
+            val newSide = if (ev.rawX > sw / 2f) 1 else 0
+            if (newSide != side) {
+                side = newSide
+                lp.gravity = Gravity.TOP or sideGravity(side)
+                barLp.gravity = sideGravity(side) or Gravity.CENTER_VERTICAL
+                bar.layoutParams = barLp
+            }
+            lp.y = (ev.rawY - h / 2f).roundToInt().coerceIn(0, (sh - h).coerceAtLeast(0))
+            runCatching { wm.updateViewLayout(v, lp) }
+        }
+
         v.setOnTouchListener { _, ev ->
             when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> downX = ev.rawX
-                MotionEvent.ACTION_MOVE -> if (ev.rawX - downX > 24 * d) openPanel()
-                MotionEvent.ACTION_UP -> if (abs(ev.rawX - downX) < 12 * d) openPanel()
+                MotionEvent.ACTION_DOWN -> {
+                    downX = ev.rawX; downY = ev.rawY; moving = false
+                    handler.postDelayed(longPress, 380)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (moving) {
+                        place(ev)
+                    } else {
+                        val dx = ev.rawX - downX
+                        val inward = if (side == 1) -dx else dx
+                        if (abs(dx) > 10 * d || abs(ev.rawY - downY) > 10 * d) handler.removeCallbacks(longPress)
+                        if (inward > 24 * d) { handler.removeCallbacks(longPress); openPanel() }
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    handler.removeCallbacks(longPress)
+                    if (moving) {
+                        moving = false
+                        EdgePrefs.setSide(this, side)
+                        EdgePrefs.setYFrac(this, ((lp.y + h / 2f) / sh).coerceIn(0.05f, 0.95f))
+                        handleSig = edgeSig()
+                        barBg.setColor(0xB3FFFFFF.toInt())
+                        bar.scaleX = 1f
+                    } else if (ev.actionMasked == MotionEvent.ACTION_UP &&
+                        abs(ev.rawX - downX) < 12 * d && abs(ev.rawY - downY) < 12 * d
+                    ) {
+                        openPanel()
+                    }
+                }
             }
             true
         }
-        val w = (24 * d).toInt()
-        val h = (150 * d).toInt()
-        val lp = overlayParams(w, h, 0).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
+
         runCatching {
             wm.addView(v, lp)
             handleView = v
+            handleSig = edgeSig()
             if (Build.VERSION.SDK_INT >= 29) {
                 v.post { v.systemGestureExclusionRects = listOf(Rect(0, 0, w, h)) }
             }
@@ -166,44 +243,61 @@ class EdgeService : Service() {
 
     // ------------------------------------------------ Kısayol paneli
 
+    private fun appItem(pkg: String, name: String): LinearLayout {
+        val d = density
+        val item = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
+            isClickable = true
+            setOnClickListener { launchGame(pkg, true) }
+            setOnLongClickListener { launchGame(pkg, false); true }
+        }
+        val icon = ImageView(this).apply {
+            runCatching { setImageDrawable(packageManager.getApplicationIcon(pkg)) }
+        }
+        item.addView(icon, LinearLayout.LayoutParams((46 * d).toInt(), (46 * d).toInt()))
+        item.addView(TextView(this).apply {
+            text = name
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize = 10f
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+        }, LinearLayout.LayoutParams((66 * d).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT))
+        return item
+    }
+
     private fun openPanel() {
         if (panelView != null) return
-        removeHandle()
         val d = density
-        val dm = resources.displayMetrics
+        val (sw, sh) = screenSize()
+        val side = EdgePrefs.side(this)
+        val centerY = EdgePrefs.yFrac(this) * sh
+        removeHandle()
 
         val games = Store(this).loadGames().filter { it.pkg != fg }
+        val gamePkgs = games.map { it.pkg }.toSet()
+        val pm = packageManager
+        val extra = EdgePrefs.apps(this)
+            .filter { it != fg && it !in gamePkgs && pm.getLaunchIntentForPackage(it) != null }
+            .map { pkg -> pkg to (runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)) }
 
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((6 * d).toInt(), (10 * d).toInt(), (6 * d).toInt(), (10 * d).toInt())
         }
-        val pm = packageManager
-        games.forEach { g ->
-            val item = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
-                isClickable = true
-                setOnClickListener { launchGame(g.pkg, true) }
-                setOnLongClickListener { launchGame(g.pkg, false); true }
-            }
-            val icon = ImageView(this).apply {
-                runCatching { setImageDrawable(pm.getApplicationIcon(g.pkg)) }
-            }
-            item.addView(icon, LinearLayout.LayoutParams((46 * d).toInt(), (46 * d).toInt()))
-            item.addView(TextView(this).apply {
-                text = g.name
-                setTextColor(0xFFFFFFFF.toInt())
-                textSize = 10f
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-                gravity = Gravity.CENTER
-                typeface = Typeface.DEFAULT_BOLD
-            }, LinearLayout.LayoutParams((66 * d).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT))
-            list.addView(item)
+        games.forEach { list.addView(appItem(it.pkg, it.name)) }
+        if (games.isNotEmpty() && extra.isNotEmpty()) {
+            list.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
+                LinearLayout.LayoutParams((40 * d).toInt(), (1 * d).toInt()).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    topMargin = (4 * d).toInt(); bottomMargin = (4 * d).toInt()
+                })
         }
-        if (games.isEmpty()) {
+        extra.forEach { (pkg, name) -> list.addView(appItem(pkg, name)) }
+        if (games.isEmpty() && extra.isEmpty()) {
             list.addView(TextView(this).apply {
                 text = "Başka oyun yok"
                 setTextColor(0xB3FFFFFF.toInt())
@@ -212,22 +306,31 @@ class EdgeService : Service() {
             })
         }
 
+        val panelW = (82 * d).toInt()
+        list.measure(
+            View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val panelH = list.measuredHeight.coerceIn((120 * d).toInt(), (sh * 0.8f).toInt())
+        val panelTop = (centerY - panelH / 2f).roundToInt().coerceIn(0, (sh - panelH).coerceAtLeast(0))
+
         val scroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
             addView(list)
             background = GradientDrawable().apply {
                 setColor(0xF2201F27.toInt())
                 val r = 24 * d
-                cornerRadii = floatArrayOf(0f, 0f, r, r, r, r, 0f, 0f)
+                cornerRadii = if (side == 1) floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r)
+                else floatArrayOf(0f, 0f, r, r, r, r, 0f, 0f)
             }
         }
-        val panelW = (82 * d).toInt()
-        val panelH = (dm.heightPixels * 0.68f).toInt()
 
         val root = FrameLayout(this).apply {
             setBackgroundColor(0x66000000)
             setOnClickListener { closePanel() }
-            addView(scroll, FrameLayout.LayoutParams(panelW, panelH, Gravity.START or Gravity.CENTER_VERTICAL))
+            addView(scroll, FrameLayout.LayoutParams(panelW, panelH, Gravity.TOP or sideGravity(side)).apply {
+                topMargin = panelTop
+            })
         }
         val lp = overlayParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
@@ -236,7 +339,8 @@ class EdgeService : Service() {
         runCatching {
             wm.addView(root, lp)
             panelView = root
-            scroll.translationX = -panelW.toFloat()
+            val off = panelW.toFloat() * (if (side == 1) 1 else -1)
+            scroll.translationX = off
             root.alpha = 0f
             root.animate().alpha(1f).setDuration(160).start()
             scroll.animate().translationX(0f).setDuration(220).start()

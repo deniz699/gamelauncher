@@ -38,6 +38,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Widget ayarı: ana ekranda widget'a basılı tutunca "Ayarlar" ile açılır -->
+        <activity
+            android:name=".WidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".EdgeService"
             android:exported="false"

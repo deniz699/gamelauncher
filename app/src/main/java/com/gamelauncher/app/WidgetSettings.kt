@@ -39,7 +39,7 @@ private val swatches = listOf(
 ).map { it.toInt() }
 
 @Composable
-private fun ColorPickRow(title: String, value: Int, onChange: (Int) -> Unit) {
+internal fun ColorPickRow(title: String, value: Int, onChange: (Int) -> Unit) {
     val cs = MaterialTheme.colorScheme
     var hex by remember(value) { mutableStateOf(String.format("#%06X", value and 0xFFFFFF)) }
     Text(title, Modifier.padding(top = 12.dp, bottom = 6.dp), style = MaterialTheme.typography.bodyMedium)
@@ -73,26 +73,12 @@ private fun ColorPickRow(title: String, value: Int, onChange: (Int) -> Unit) {
     }
 }
 
-/** Ayarlar sayfasındaki "Widget renkleri" bölümü. Değişiklik anında widget'lara uygulanır. */
+/** Renk / saydamlık düzenleyici: hem varsayılan ayarlarda hem tek widget ayarında kullanılır. */
 @Composable
-fun WidgetColorSettings() {
-    val ctx = LocalContext.current
-    var st by remember { mutableStateOf(WidgetStyle.load(ctx)) }
-    fun change(n: WStyle) {
-        st = n
-        WidgetStyle.save(ctx, n)
-        WidgetUi.updateAll(ctx)
-    }
-
-    Text("Widget renkleri", Modifier.padding(top = 20.dp, bottom = 2.dp), style = MaterialTheme.typography.titleSmall)
-    Text(
-        "Ana ekrana eklediğin widget'lar bu renkleri kullanır; değişiklik hemen uygulanır.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    ColorPickRow("Arka plan rengi", st.bg) { change(st.copy(bg = it)) }
-    ColorPickRow("Yazı rengi", st.text) { change(st.copy(text = it)) }
-    ColorPickRow("Vurgu rengi (yaylar, çubuklar, süreler)", st.accent) { change(st.copy(accent = it)) }
+internal fun StyleEditor(st: WStyle, showTempColors: Boolean, onChange: (WStyle) -> Unit) {
+    ColorPickRow("Arka plan rengi", st.bg) { onChange(st.copy(bg = it)) }
+    ColorPickRow("Yazı rengi", st.text) { onChange(st.copy(text = it)) }
+    ColorPickRow("Vurgu rengi (yaylar, çubuklar, süreler)", st.accent) { onChange(st.copy(accent = it)) }
 
     Text(
         "Arka plan saydamlığı: %${(st.alpha * 100f / 255f).roundToInt()}",
@@ -100,20 +86,58 @@ fun WidgetColorSettings() {
     )
     Slider(
         value = st.alpha / 255f,
-        onValueChange = { change(st.copy(alpha = (it * 255f).roundToInt().coerceIn(40, 255))) },
+        onValueChange = { onChange(st.copy(alpha = (it * 255f).roundToInt().coerceIn(40, 255))) },
         valueRange = 0.15f..1f
     )
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("Sıcaklığa göre renk")
-            Text(
-                "Sıcaklık widget'ında yaylar sıcaklığa göre yeşil / sarı / kırmızı olur; kapalıyken vurgu rengi kullanılır.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    if (showTempColors) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Sıcaklığa göre renk")
+                Text(
+                    "Sıcaklık widget'ında yaylar sıcaklığa göre yeşil / sarı / kırmızı olur; kapalıyken vurgu rengi kullanılır.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            FlatSwitch(checked = st.tempColors, onCheckedChange = { onChange(st.copy(tempColors = it)) })
         }
-        Spacer(Modifier.width(12.dp))
-        FlatSwitch(checked = st.tempColors, onCheckedChange = { change(st.copy(tempColors = it)) })
     }
     Spacer(Modifier.height(4.dp))
+}
+
+/** Ayarlar sayfasındaki "Varsayılan widget renkleri" bölümü. Değişiklik anında widget'lara uygulanır. */
+@Composable
+fun WidgetColorSettings() {
+    val ctx = LocalContext.current
+    var st by remember { mutableStateOf(WidgetStyle.loadDefault(ctx)) }
+    fun change(n: WStyle) {
+        st = n
+        WidgetStyle.saveDefault(ctx, n)
+        WidgetUi.updateAll(ctx)
+    }
+
+    Text("Varsayılan widget renkleri", Modifier.padding(top = 20.dp, bottom = 2.dp), style = MaterialTheme.typography.titleSmall)
+    Text(
+        "Ayrı renk verilmemiş tüm widget'lar bunu kullanır. Tek bir widget'ın rengini değiştirmek için ana ekranda " +
+            "o widget'a basılı tut ve çıkan \"Ayarlar\" düğmesine dokun.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    StyleEditor(st, showTempColors = true) { change(it) }
+    SoftButton(
+        "Hepsini eski haline sıfırla",
+        {
+            WidgetStyle.resetAll(ctx)
+            st = WidgetStyle.FACTORY
+            WidgetUi.updateAll(ctx)
+        },
+        Modifier.padding(top = 4.dp)
+    )
+    Text(
+        "Varsayılan renkleri ve widget'lara tek tek verdiğin renklerin hepsini fabrika ayarına döndürür.",
+        Modifier.padding(top = 4.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
