@@ -8,17 +8,20 @@ import android.app.Service
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
 import android.text.TextUtils
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -30,6 +33,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import java.io.File
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -52,6 +57,25 @@ class EdgeService : Service() {
     private var panelOwner: String? = null // panelin açıldığı oyun; pencere kapanınca oyuna dönülmüş sayılır
     private var panelLaunchTs = 0L
     private val density get() = resources.displayMetrics.density
+
+    // Oyun içi göstergeler
+    private var hudView: TextView? = null
+    private var hudSig = ""
+    private var frames = 0
+    private var hudStart = 0L
+    private var fpsCounting = false
+    private val frameCb = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            frames++
+            if (fpsCounting) Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+    private val hudTick = object : Runnable {
+        override fun run() {
+            updateHud()
+            handler.postDelayed(this, 1000)
+        }
+    }
 
     private val poll = object : Runnable {
         override fun run() {
@@ -76,6 +100,7 @@ class EdgeService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        stopHud()
         removeHandle()
         closePanel()
         super.onDestroy()
@@ -83,11 +108,18 @@ class EdgeService : Service() {
 
     private fun startFg() {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel("edge", "Kenar paneli", NotificationManager.IMPORTANCE_LOW))
-        val n = Notification.Builder(this, "edge")
-            .setContentTitle("Oyun kenar paneli açık")
-            .setContentText("Oyundayken solda çıkan çizgiye dokun")
+        // Eski (sesli/görünür) kanal kaldırılır; yeni kanal en düşük önemde, kilit ekranında gizli
+        runCatching { nm.deleteNotificationChannel("edge") }
+        nm.createNotificationChannel(
+            NotificationChannel("edge_quiet", "Arka plan hizmeti", NotificationManager.IMPORTANCE_MIN).apply {
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_SECRET
+            }
+        )
+        val n = Notification.Builder(this, "edge_quiet")
+            .setContentTitle("Game Launcher")
             .setSmallIcon(android.R.drawable.ic_menu_more)
+            .setVisibility(Notification.VISIBILITY_SECRET)
             .setOngoing(true)
             .build()
         if (Build.VERSION.SDK_INT >= 34) {
@@ -131,10 +163,128 @@ class EdgeService : Service() {
         if (cur != null && cur in gamePkgs && System.currentTimeMillis() - panelLaunchTs > 4000) {
             panelApp = null; panelOwner = null
         }
-        val show = cur != null && (cur in gamePkgs || cur == panelApp)
+        syncHud()
+        val show = EdgePrefs.edgeOn(this) && cur != null && (cur in gamePkgs || cur == panelApp)
+        if (!EdgePrefs.edgeOn(this) && !EdgePrefs.hudAny(this)) { stopSelf(); return }
         if (show && handleView != null && handleSig != edgeSig()) removeHandle()   // ayar değişti: yeniden çiz
         if (show && handleView == null && panelView == null) addHandle()
         if (!show) { removeHandle(); closePanel() }
+    }
+
+    // ------------------------------------------------ Oyun içi göstergeler (FPS / pil / CPU)
+
+    private fun syncHud() {
+        val cur = fg
+        val inGame = cur != null && cur in gamePkgs
+        if (inGame && EdgePrefs.hudAny(this)) {
+            if (hudView != null && hudSig != hudSignature()) stopHud()
+            if (hudView == null) startHud()
+        } else {
+            stopHud()
+        }
+    }
+
+    /** Panelin üstündeki küçük aç/kapa düğmesi (FPS / Pil / CPU). */
+    private fun hudToggle(label: String, get: () -> Boolean, set: (Boolean) -> Unit): TextView {
+        val d = density
+        val tv = TextView(this)
+        fun paint() {
+            val on = get()
+            tv.setTextColor(if (on) 0xFF201F27.toInt() else 0xFFFFFFFF.toInt())
+            tv.background = GradientDrawable().apply {
+                setColor(if (on) 0xFFBFA8FF.toInt() else 0x33FFFFFF)
+                cornerRadius = 12 * d
+            }
+        }
+        tv.apply {
+            text = label
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            isClickable = true
+            setOnClickListener { set(!get()); paint(); syncHud() }
+        }
+        paint()
+        return tv
+    }
+
+    private fun hudSignature() = "${EdgePrefs.hudPos(this)}/${EdgePrefs.hudFps(this)}/${EdgePrefs.hudBat(this)}/${EdgePrefs.hudCpu(this)}"
+
+    private fun startHud() {
+        val d = density
+        val tv = TextView(this).apply {
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            setShadowLayer(3f * d, 0f, 0f, 0xFF000000.toInt())   // arka plan yok; okunurluk için gölge
+            setPadding((8 * d).toInt(), (4 * d).toInt(), (8 * d).toInt(), 0)
+        }
+        val pos = EdgePrefs.hudPos(this)
+        tv.gravity = when (pos) { 1 -> Gravity.CENTER_HORIZONTAL; 2 -> Gravity.END; else -> Gravity.START }
+        val lp = overlayParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        ).apply {
+            gravity = Gravity.TOP or when (pos) { 1 -> Gravity.CENTER_HORIZONTAL; 2 -> Gravity.END; else -> Gravity.START }
+        }
+        runCatching {
+            wm.addView(tv, lp)
+            hudView = tv
+            hudSig = hudSignature()
+            frames = 0
+            hudStart = System.currentTimeMillis()
+            if (EdgePrefs.hudFps(this)) {
+                fpsCounting = true
+                Choreographer.getInstance().postFrameCallback(frameCb)
+            }
+            handler.post(hudTick)
+        }
+    }
+
+    private fun stopHud() {
+        if (hudView == null) return
+        handler.removeCallbacks(hudTick)
+        fpsCounting = false
+        Choreographer.getInstance().removeFrameCallback(frameCb)
+        hudView?.let { runCatching { wm.removeView(it) } }
+        hudView = null
+    }
+
+    /** Bazı cihazlarda ekran sürücüsü gerçek kare hızını dosyaya yazar; okunabiliyorsa onu kullanırız. */
+    private fun sysfsFps(): Float? {
+        val paths = listOf(
+            "/sys/class/drm/sde-crtc-0/measured_fps",
+            "/sys/class/graphics/fb0/measured_fps"
+        )
+        for (p in paths) {
+            val t = runCatching { File(p).readText() }.getOrNull() ?: continue
+            val m = Regex("fps:?\\s*([0-9]+(?:\\.[0-9]+)?)").find(t) ?: Regex("([0-9]+(?:\\.[0-9]+)?)").find(t) ?: continue
+            return m.groupValues[1].toFloatOrNull()
+        }
+        return null
+    }
+
+    private fun updateHud() {
+        val tv = hudView ?: return
+        val lines = ArrayList<String>()
+        if (EdgePrefs.hudFps(this)) {
+            val now = System.currentTimeMillis()
+            val el = (now - hudStart).coerceAtLeast(1)
+            val fps = sysfsFps() ?: (frames * 1000f / el)
+            frames = 0
+            hudStart = now
+            lines += "FPS: ${fps.roundToInt()}"
+        }
+        if (EdgePrefs.hudBat(this)) {
+            val b = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val t = b?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
+            lines += "PİL: " + (if (t != Int.MIN_VALUE) String.format(Locale.US, "%.1f°C", t / 10f) else "--")
+        }
+        if (EdgePrefs.hudCpu(this)) {
+            val c = cpuTempC()
+            lines += "CPU: " + (c?.let { String.format(Locale.US, "%.0f°C", it) } ?: "--")
+        }
+        tv.text = lines.joinToString("\n")
     }
 
     // ------------------------------------------------ Tutamaç (kenardaki çizgi)
@@ -301,6 +451,17 @@ class EdgeService : Service() {
             orientation = LinearLayout.VERTICAL
             setPadding((6 * d).toInt(), (10 * d).toInt(), (6 * d).toInt(), (10 * d).toInt())
         }
+        // Oyun içi bilgi düğmeleri
+        val tl = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (30 * d).toInt()).apply {
+            setMargins((4 * d).toInt(), (3 * d).toInt(), (4 * d).toInt(), (3 * d).toInt())
+        }
+        list.addView(hudToggle("FPS", { EdgePrefs.hudFps(this) }, { EdgePrefs.setHudFps(this, it) }), tl)
+        list.addView(hudToggle("Pil", { EdgePrefs.hudBat(this) }, { EdgePrefs.setHudBat(this, it) }), tl)
+        list.addView(hudToggle("CPU", { EdgePrefs.hudCpu(this) }, { EdgePrefs.setHudCpu(this, it) }), tl)
+        list.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (1 * d).toInt()).apply {
+                setMargins((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (4 * d).toInt())
+            })
         apps.forEach { (pkg, name) -> list.addView(appItem(pkg, name)) }
         if (apps.isEmpty()) {
             list.addView(TextView(this).apply {

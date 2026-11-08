@@ -28,9 +28,9 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -121,7 +121,7 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
 // ====================================================================== Ayarlar (liste)
 
 private enum class Sub(val title: String) {
-    EDGE("Yan Panel"), USAGE("Süre takibi"), UPDATES("Güncellemeler"),
+    EDGE("Yan Panel"), UPDATES("Güncellemeler"), PERMS("İzinler"),
     HELP("Yardım"), CONTACT("İletişim"), ABOUT("Hakkında")
 }
 
@@ -135,9 +135,9 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
             null -> Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 TopRow("Ayarlar", onClose)
                 Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 24.dp)) {
-                    SettingsRow(Icons.Default.VerticalSplit, "Yan Panel", "Oyun içi kenar paneli, konum ve uygulamalar") { sub = Sub.EDGE }
-                    SettingsRow(Icons.Default.Timer, "Süre takibi", if (s.hasUsage) "Kullanım erişimi verildi" else "Kullanım erişimi gerekli") { sub = Sub.USAGE }
+                    SettingsRow(Icons.Default.VerticalSplit, "Yan Panel", "Kenar paneli, FPS / sıcaklık göstergesi, uygulamalar") { sub = Sub.EDGE }
                     SettingsRow(Icons.Default.SystemUpdate, "Güncellemeler", "Sürüm ${Updater.current(LocalContext.current).name}") { sub = Sub.UPDATES }
+                    SettingsRow(Icons.Default.Lock, "İzinler", if (s.hasUsage) "Kullanım erişimi verildi" else "Kullanım erişimi gerekli") { sub = Sub.PERMS }
                     SettingsRow(Icons.AutoMirrored.Filled.HelpOutline, "Yardım", "Sık sorulan sorular") { sub = Sub.HELP }
                     SettingsRow(Icons.Default.Mail, "İletişim", null) { sub = Sub.CONTACT }
                     SettingsRow(Icons.Default.Info, "Hakkında", null) { sub = Sub.ABOUT }
@@ -151,8 +151,8 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                 ) {
                     when (cur) {
                         Sub.EDGE -> EdgePage(s)
-                        Sub.USAGE -> UsagePage(s)
                         Sub.UPDATES -> UpdatesPage()
+                        Sub.PERMS -> PermissionsPage(s)
                         Sub.HELP -> HelpPage()
                         Sub.CONTACT -> {}   // şimdilik boş
                         Sub.ABOUT -> AboutPage()
@@ -223,27 +223,101 @@ private fun EdgePage(s: AppState) {
         })
     }
     EdgePanelSettings()
+    HudSection(s)
 }
 
-// ====================================================================== Süre takibi
+// ====================================================================== Oyun içi bilgi (Yan Panel sayfasının içinde)
 
 @Composable
-private fun UsagePage(s: AppState) {
+private fun HudSection(s: AppState) {
+    val ctx = LocalContext.current
+    var fps by remember { mutableStateOf(EdgePrefs.hudFps(ctx)) }
+    var bat by remember { mutableStateOf(EdgePrefs.hudBat(ctx)) }
+    var cpu by remember { mutableStateOf(EdgePrefs.hudCpu(ctx)) }
+    var pos by remember { mutableIntStateOf(EdgePrefs.hudPos(ctx)) }
+
+    // Açmak için "Diğer uygulamaların üzerinde göster" izni gerekir; yoksa izin ekranına gidilir
+    fun toggle(on: Boolean, set: (Boolean) -> Unit, save: (Boolean) -> Unit) {
+        if (on && !Settings.canDrawOverlays(ctx)) {
+            ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName)))
+            return
+        }
+        set(on); save(on); s.applyEdge()
+    }
+
+    Text("Oyun içi bilgi", Modifier.padding(top = 28.dp), style = MaterialTheme.typography.titleMedium)
+    Text(
+        "Oyundayken ekranda yazı olarak gösterilir; arka planı yoktur ve dokunmayı engellemez. Her biri ayrı açılıp kapanır. Yan paneli açınca da buradan aç/kapatabilirsin.",
+        Modifier.padding(top = 4.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    HudSwitch("FPS", "Ekranda \"FPS: 60\" gibi görünür", fps) { toggle(it, { v -> fps = v }) { v -> EdgePrefs.setHudFps(ctx, v) } }
+    HudSwitch("Pil sıcaklığı", "Fps satırının altına eklenir", bat) { toggle(it, { v -> bat = v }) { v -> EdgePrefs.setHudBat(ctx, v) } }
+    HudSwitch("CPU sıcaklığı", "Pil sıcaklığının altına eklenir. Bazı telefonlarda Android okumaya izin vermez, \"--\" görünür.", cpu) {
+        toggle(it, { v -> cpu = v }) { v -> EdgePrefs.setHudCpu(ctx, v) }
+    }
+
+    Text("Konum", Modifier.padding(top = 16.dp, bottom = 6.dp), style = MaterialTheme.typography.bodyMedium)
+    SegmentedChoice(listOf("Üst sol", "Üst orta", "Üst sağ"), pos) { pos = it; EdgePrefs.setHudPos(ctx, it) }
+}
+
+@Composable
+private fun HudSwitch(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title)
+            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        FlatSwitch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+// ====================================================================== İzinler
+
+@Composable
+private fun PermissionsPage(s: AppState) {
     val ctx = LocalContext.current
     Text(
-        "Oynama sürelerini ölçebilmek için \"Kullanım erişimi\" izni gerekir. Oyun içi kenar paneli de bu izni kullanır.",
+        "Süre takibi, yan panel ve oyun içi bilgi için gereken izinler burada.",
         Modifier.padding(top = 8.dp),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+
+    Text("Kullanım erişimi (süre takibi)", Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleSmall)
     Text(
-        if (s.hasUsage) "Kullanım erişimi verildi ✓" else "Kullanım erişimi verilmedi — süreler ölçülemez.",
-        Modifier.padding(top = 12.dp)
+        "Oynama sürelerini ölçmek için gerekir. Yan panel ve oyun içi bilgi de oyunun açık olduğunu bu izinle anlar.",
+        Modifier.padding(top = 4.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Text(
+        if (s.hasUsage) "Verildi ✓" else "Verilmedi — süreler ölçülemez.",
+        Modifier.padding(top = 8.dp)
     )
     SoftButton(
         "Kullanım erişimi ayarlarını aç",
         { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
-        Modifier.padding(top = 12.dp)
+        Modifier.padding(top = 8.dp)
+    )
+
+    Text("Diğer uygulamaların üzerinde göster", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleSmall)
+    Text(
+        "Yan panel çizgisi ve oyun içi FPS / sıcaklık yazıları için gerekir.",
+        Modifier.padding(top = 4.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Text(
+        if (Settings.canDrawOverlays(ctx)) "Verildi ✓" else "Verilmedi — yan panel ve oyun içi bilgi çalışmaz.",
+        Modifier.padding(top = 8.dp)
+    )
+    SoftButton(
+        "Üstte gösterme ayarlarını aç",
+        { ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName))) },
+        Modifier.padding(top = 8.dp)
     )
 }
 
@@ -404,7 +478,7 @@ private fun UpdatesPage() {
 
 private val faq = listOf(
     "Oynama süreleri neden görünmüyor?" to
-        "Süreleri ölçmek için \"Kullanım erişimi\" izni gerekir. Ayarlar > Süre takibi'nden izni verip uygulamaya dön; süreler bundan sonra kaydedilir.",
+        "Süreleri ölçmek için \"Kullanım erişimi\" izni gerekir. Ayarlar > İzinler'den izni verip uygulamaya dön; süreler bundan sonra kaydedilir.",
     "Widget'ları nasıl eklerim?" to
         "Ana ekranda boş bir yere basılı tut, Widget'lar'ı aç ve Game Launcher'ı seç. Üç widget var: Oyunlar ve süreler, Sıcaklıklar, Telefon özeti.",
     "Widget'ın rengini nasıl değiştiririm?" to
@@ -418,7 +492,7 @@ private val faq = listOf(
     "Panelden açtığım pencere neden küçük açılmıyor?" to
         "Açılır pencere için cihazın serbest pencere desteği olması gerekir. Desteklemeyen cihazlarda uygulama tam ekran açılır. Kısayola uzun basarsan uygulama normal açılır.",
     "Tema ve duvar kağıdını nerede değiştiririm?" to
-        "Ana sayfada sol üstteki kalem simgesine dokun. Tema, vurgu rengi, duvar kağıdı ve bulanıklık orada.",
+        "Ana sayfada üstteki telefon simgesinin solundaki kalem simgesine dokun. Tema, vurgu rengi, duvar kağıdı ve bulanıklık orada.",
     "Uygulamayı nasıl güncellerim?" to
         "Ayarlar > Güncellemeler'e gir ve \"Güncellemeyi kontrol et\"e dokun. Yeni sürüm varsa indirip kurabilirsin."
 )

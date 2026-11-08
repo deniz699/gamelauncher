@@ -60,6 +60,18 @@ object EdgePrefs {
     fun yFrac(ctx: Context): Float = p(ctx).getFloat("edge_y", 0.5f)      // çizginin ortası, ekran yüksekliğinin oranı
     fun setYFrac(ctx: Context, v: Float) = p(ctx).edit().putFloat("edge_y", v).apply()
 
+    // Oyun içi göstergeler (FPS / pil / CPU sıcaklığı)
+    fun hudFps(ctx: Context): Boolean = p(ctx).getBoolean("hud_fps", false)
+    fun setHudFps(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("hud_fps", v).apply()
+    fun hudBat(ctx: Context): Boolean = p(ctx).getBoolean("hud_bat", false)
+    fun setHudBat(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("hud_bat", v).apply()
+    fun hudCpu(ctx: Context): Boolean = p(ctx).getBoolean("hud_cpu", false)
+    fun setHudCpu(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("hud_cpu", v).apply()
+    fun hudAny(ctx: Context): Boolean = hudFps(ctx) || hudBat(ctx) || hudCpu(ctx)
+    fun hudPos(ctx: Context): Int = p(ctx).getInt("hud_pos", 0)          // 0 üst sol, 1 üst orta, 2 üst sağ
+    fun setHudPos(ctx: Context, v: Int) = p(ctx).edit().putInt("hud_pos", v).apply()
+    fun edgeOn(ctx: Context): Boolean = p(ctx).getBoolean("edge", false)
+
     fun apps(ctx: Context): List<String> =
         (p(ctx).getString("edge_apps", "") ?: "").split(",").filter { it.isNotBlank() }
     fun setApps(ctx: Context, list: List<String>) = p(ctx).edit().putString("edge_apps", list.joinToString(",")).apply()

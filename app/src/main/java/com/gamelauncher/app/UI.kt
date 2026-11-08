@@ -127,9 +127,6 @@ fun App(s: AppState) {
             topBar = {
                 TopAppBar(
                     title = { Text("Oyunlarım", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = { showAppearance = true }) { Icon(Icons.Default.Edit, "Görünümü düzenle") }
-                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent,
@@ -137,6 +134,7 @@ fun App(s: AppState) {
                         actionIconContentColor = onBgColor()
                     ),
                     actions = {
+                        IconButton(onClick = { showAppearance = true }) { Icon(Icons.Default.Edit, "Görünümü düzenle") }
                         IconButton(onClick = { showDevice = true }) {
                             Icon(Icons.Default.PhoneAndroid, "Cihaz bilgileri")
                         }

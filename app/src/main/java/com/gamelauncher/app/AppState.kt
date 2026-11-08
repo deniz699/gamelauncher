@@ -164,7 +164,7 @@ class AppState(private val ctx: Context) {
 
     fun applyEdge() {
         val i = Intent(ctx, EdgeService::class.java)
-        if (edge && Settings.canDrawOverlays(ctx) && UsageSync.hasPermission(ctx)) {
+        if ((edge || EdgePrefs.hudAny(ctx)) && Settings.canDrawOverlays(ctx) && UsageSync.hasPermission(ctx)) {
             runCatching { ContextCompat.startForegroundService(ctx, i) }
         } else {
             ctx.stopService(i)
