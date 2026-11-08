@@ -55,7 +55,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPosition
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
@@ -84,7 +84,7 @@ fun rememberGlassBackdrop(): GlassBackdrop {
 /** Çubuğun "arkasında" görünecek içeriğe uygulanır. */
 fun Modifier.glassSource(b: GlassBackdrop, bg: Color): Modifier =
     this
-        .onGloballyPosition { b.origin = it.positionInRoot() }
+        .onGloballyPositioned { b.origin = it.positionInRoot() }
         .drawWithContent {
             b.layer.record {
                 drawRect(bg)
@@ -188,7 +188,7 @@ fun GlassBottomBar(
     Box(
         modifier
             .shadow(if (glass) 14.dp else 8.dp, pill, clip = false)
-            .onGloballyPosition { barRoot = it.positionInRoot() }
+            .onGloballyPositioned { barRoot = it.positionInRoot() }
             .pointerInput(n) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
