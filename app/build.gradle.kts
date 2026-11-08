@@ -12,8 +12,13 @@ android {
         applicationId = "com.gamelauncher.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // GitHub Actions her derlemede GITHUB_RUN_NUMBER'ı artırır; sürüm numarası buradan gelir.
+        // Uygulama içi "Güncellemeler" bu numarayı GitHub'daki son sürümle karşılaştırır.
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = run
+        versionName = "1.0.$run"
+        // "kullanici/depo" — Actions'ta otomatik dolar, yerelde boş kalır
+        buildConfigField("String", "GITHUB_REPO", "\"${System.getenv("GITHUB_REPOSITORY") ?: ""}\"")
     }
 
     signingConfigs {
@@ -37,7 +42,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 dependencies {

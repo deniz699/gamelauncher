@@ -80,6 +80,7 @@ fun App(s: AppState) {
     var tab by remember { mutableIntStateOf(0) }
     var showAdd by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showAppearance by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var showDevice by remember { mutableStateOf(false) }
     var statsGame by remember { mutableStateOf<String?>(null) }
@@ -126,6 +127,9 @@ fun App(s: AppState) {
             topBar = {
                 TopAppBar(
                     title = { Text("Oyunlarım", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = { showAppearance = true }) { Icon(Icons.Default.Edit, "Görünümü düzenle") }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent,
@@ -206,6 +210,7 @@ fun App(s: AppState) {
     }
 
     if (showAdd) AddSheet(s) { showAdd = false }
+    if (showAppearance) AppearanceSheet(s) { showAppearance = false }
     selected?.let { DetailSheet(s, it) { selected = null } }
 }
 
@@ -478,112 +483,6 @@ fun StatsTab(s: AppState, onGame: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(120.dp))
-    }
-}
-
-// ---------------------------------------------------------------- Ayarlar
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-fun SettingsPage(s: AppState, onClose: () -> Unit) {
-    val ctx = LocalContext.current
-    val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-    val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) s.setBackground(uri)
-    }
-    BackHandler(onBack = onClose)
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(4.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri") }
-            Text("Ayarlar", style = MaterialTheme.typography.titleLarge)
-        }
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
-
-            Text("Tema", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
-            SegmentedChoice(listOf("Sistem", "Açık", "Koyu", "AMOLED"), s.themeMode) { s.setTheme(it) }
-
-            if (android.os.Build.VERSION.SDK_INT >= 31) {
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Telefonun renklerini kullan")
-                        Text(
-                            "Uygulama renklerini telefonunun duvar kağıdına göre otomatik ayarlar (Material You). Açıkken vurgu rengi seçilemez.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    FlatSwitch(checked = s.dynamic, onCheckedChange = { s.setDynamic(it) })
-                }
-            }
-
-            if (!s.dynamic || android.os.Build.VERSION.SDK_INT < 31) {
-                Text("Vurgu rengi", Modifier.padding(top = 12.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    accents.forEachIndexed { i, c ->
-                        Box(
-                            Modifier.size(40.dp).clip(CircleShape).background(c)
-                                .then(
-                                    if (s.accent == i) Modifier.border(BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface), CircleShape)
-                                    else Modifier
-                                )
-                                .clickable { s.setAccent(i) }
-                        )
-                    }
-                }
-            }
-
-            Text("Arka plan", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SoftButton("Duvar kağıdı seç", { bgPicker.launch("image/*") }, icon = Icons.Default.Image)
-                if (s.bgPath != null) {
-                    SoftButton("Varsayılana dön", { s.clearBackground() })
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Arka planı bulanıklaştır", Modifier.weight(1f))
-                FlatSwitch(checked = s.bgBlur, onCheckedChange = { s.changeBgBlur(it) })
-            }
-
-            WidgetColorSettings()
-
-            Text("Oyun içi kenar paneli", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Kenar panelini aç")
-                    Text(
-                        "Oyundayken ekranın kenarında küçük bir çizgi çıkar. Dokununca ya da içeri kaydırınca seçtiğin uygulamaların kısayolları açılır (uygulamaları aşağıdan seç); kısayola dokunmak uygulamayı açılır pencerede (cihaz destekliyorsa) başlatır, uzun basmak normal açar. \"Diğer uygulamaların üzerinde göster\" ve kullanım erişimi izni gerekir; izni verip geri dönünce anahtarı tekrar aç.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                FlatSwitch(checked = s.edge, onCheckedChange = { on ->
-                    if (!on) {
-                        s.changeEdge(false)
-                    } else if (!Settings.canDrawOverlays(ctx)) {
-                        ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName)))
-                    } else {
-                        if (android.os.Build.VERSION.SDK_INT >= 33) notifPerm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                        s.changeEdge(true)
-                    }
-                })
-            }
-
-            EdgePanelSettings()
-
-            Text("Süre takibi", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
-            Text(
-                if (s.hasUsage) "Kullanım erişimi verildi ✓" else "Kullanım erişimi verilmedi — süreler ölçülemez.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            SoftButton(
-                "Kullanım erişimi ayarlarını aç",
-                { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
-                Modifier.padding(top = 8.dp)
-            )
-        }
-        }
     }
 }
 
