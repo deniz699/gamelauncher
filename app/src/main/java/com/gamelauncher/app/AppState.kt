@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -54,19 +53,9 @@ class AppState(private val ctx: Context) {
         runCatching { SortMode.valueOf(prefs.getString("sort", "MANUAL")!!) }.getOrDefault(SortMode.MANUAL)
     )
 
-    var iconMode by mutableIntStateOf(prefs.getInt("icon_mode", 0)) // 0 temaya göre, 1 beyaz, 2 siyah
+    var iconDark by mutableStateOf(prefs.getBoolean("icon_dark", false)) // false beyaz simge, true siyah simge
 
-    /** Uygulama simgesi koyu mu olacak? Temaya göre modunda: Sistem → telefon modu, Açık → beyaz, Koyu/AMOLED → siyah. */
-    fun iconIsDark(sysDark: Boolean): Boolean = when (iconMode) {
-        1 -> false
-        2 -> true
-        else -> when (themeMode) { 1 -> false; 2, 3 -> true; else -> sysDark }
-    }
-
-    @JvmName("applyIconMode") fun setIconMode(v: Int) { iconMode = v; prefs.edit().putInt("icon_mode", v).apply() }
-
-    /** Ana ekran simgesini şimdi eşitler (uygulama açıkken çağrılırsa Android uygulamayı kapatabilir; bu yüzden onStop'ta çağrılır). */
-    fun applyIcon() = IconSwitcher.sync(ctx)
+    @JvmName("applyIconDark") fun setIconDark(v: Boolean) { iconDark = v; prefs.edit().putBoolean("icon_dark", v).apply() }
 
     fun setTheme(v: Int) { themeMode = v; prefs.edit().putInt("theme", v).apply() }
     @JvmName("applyAccent") fun setAccent(v: Int) { accent = v; prefs.edit().putInt("accent", v).apply() }
@@ -292,12 +281,7 @@ class AppState(private val ctx: Context) {
 object IconSwitcher {
     fun sync(ctx: Context) {
         val p = ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-        val sysDark = (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        val wantDark = when (p.getInt("icon_mode", 0)) {
-            1 -> false
-            2 -> true
-            else -> when (p.getInt("theme", 0)) { 1 -> false; 2, 3 -> true; else -> sysDark }
-        }
+        val wantDark = p.getBoolean("icon_dark", false)
         val pm = ctx.packageManager
         val light = ComponentName(ctx.packageName, "com.gamelauncher.app.IconLight")
         val dark = ComponentName(ctx.packageName, "com.gamelauncher.app.IconDark")

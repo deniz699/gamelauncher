@@ -75,10 +75,10 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
             SegmentedChoice(listOf("Sistem", "Açık", "Koyu", "AMOLED"), s.themeMode) { s.setTheme(it) }
 
             Text("Uygulama simgesi", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
-            SegmentedChoice(listOf("Temaya göre", "Beyaz", "Siyah"), s.iconMode) { s.setIconMode(it) }
-            val activeDark = s.iconIsDark(androidx.compose.foundation.isSystemInDarkTheme())
+            SegmentedChoice(listOf("Beyaz", "Siyah"), if (s.iconDark) 1 else 0) { s.setIconDark(it == 1) }
+            val activeDark = s.iconDark
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                listOf(false to R.drawable.logo_light, true to R.drawable.logo_dark).forEach { (isDark, res) ->
+                listOf(false to R.drawable.logo_white, true to R.drawable.logo_black).forEach { (isDark, res) ->
                     androidx.compose.foundation.Image(
                         painterResource(res), if (isDark) "Siyah simge" else "Beyaz simge",
                         Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))

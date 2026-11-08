@@ -88,20 +88,11 @@ class EdgeService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // Telefon açık/koyu modu değişince ana ekran simgesini eşitle
-    private val themeReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) { IconSwitcher.sync(applicationContext) }
-    }
-
     override fun onCreate() {
         super.onCreate()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         lastEvent = System.currentTimeMillis() - 10 * 60_000L
         handler.post(poll)
-        androidx.core.content.ContextCompat.registerReceiver(
-            this, themeReceiver, IntentFilter(Intent.ACTION_CONFIGURATION_CHANGED),
-            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
-        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -110,7 +101,6 @@ class EdgeService : Service() {
     }
 
     override fun onDestroy() {
-        runCatching { unregisterReceiver(themeReceiver) }
         handler.removeCallbacksAndMessages(null)
         stopHud()
         removeHandle()
