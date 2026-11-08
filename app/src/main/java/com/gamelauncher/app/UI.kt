@@ -26,6 +26,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import android.os.Build
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.graphics.luminance
@@ -79,6 +81,14 @@ fun App(s: AppState) {
     val ctx = LocalContext.current
     // Geri: Favoriler/İstatistik'ten ana sayfaya döner, ana sayfadayken uygulamadan çıkar
     BackHandler(enabled = tab != 0) { tab = 0 }
+    // Sağa/sola kaydırarak sayfa değiştirme (alt çubukla senkron)
+    val pagerState = rememberPagerState { 3 }
+    LaunchedEffect(tab) {
+        if (pagerState.currentPage != tab) pagerState.animateScrollToPage(tab)
+    }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { tab = it }
+    }
 
     val tabs: List<Pair<String, ImageVector>> = listOf(
         "Tümü" to Icons.Default.SportsEsports,
@@ -117,14 +127,8 @@ fun App(s: AppState) {
                         actionIconContentColor = onBgColor()
                     ),
                     actions = {
-                        TextButton(
-                            onClick = { showDevice = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp),
-                            colors = ButtonDefaults.textButtonColors(contentColor = onBgColor())
-                        ) {
-                            Icon(Icons.Default.PhoneAndroid, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Telefon", fontSize = 12.sp)
+                        IconButton(onClick = { showDevice = true }) {
+                            Icon(Icons.Default.PhoneAndroid, "Cihaz bilgileri")
                         }
                         if (tab != 2) {
                             Box {
@@ -162,10 +166,12 @@ fun App(s: AppState) {
                         }
                     }
                 }
-                when (tab) {
+                HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
+                when (page) {
                     0 -> GameGrid(s, s.sortedGames(), "Oyun bulunamadı. Telefondaki oyunlar otomatik eklenir.") { selected = it }
                     1 -> GameGrid(s, s.sortedGames().filter { it.favorite }, "Favori oyun yok. Kalbe dokunarak ekle.") { selected = it }
                     else -> StatsTab(s)
+                }
                 }
             }
 
