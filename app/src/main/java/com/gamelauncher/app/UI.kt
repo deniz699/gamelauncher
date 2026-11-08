@@ -545,6 +545,8 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                 FlatSwitch(checked = s.bgBlur, onCheckedChange = { s.changeBgBlur(it) })
             }
 
+            WidgetColorSettings()
+
             Text("Oyun içi kenar paneli", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

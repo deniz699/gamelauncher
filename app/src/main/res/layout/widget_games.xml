@@ -1,57 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:padding="14dp" android:background="@drawable/widget_bg">
-    <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="14sp" android:paddingBottom="6dp" />
-    <TextView android:id="@+id/empty" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="Henüz oyun yok" android:textColor="#B3FFFFFF" android:textSize="12sp" android:visibility="gone" />
-    <LinearLayout android:id="@+id/g1r" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp">
-        <TextView android:id="@+id/g1n" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:maxLines="1" android:ellipsize="end"
-            android:textColor="#FFFFFF" android:textSize="13sp" />
-        <TextView android:id="@+id/g1t" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:textColor="#FFBFA8FF" android:textStyle="bold" android:textSize="13sp" />
-    </LinearLayout>
-    <LinearLayout android:id="@+id/g2r" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp">
-        <TextView android:id="@+id/g2n" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:maxLines="1" android:ellipsize="end"
-            android:textColor="#FFFFFF" android:textSize="13sp" />
-        <TextView android:id="@+id/g2t" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:textColor="#FFBFA8FF" android:textStyle="bold" android:textSize="13sp" />
-    </LinearLayout>
-    <LinearLayout android:id="@+id/g3r" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp">
-        <TextView android:id="@+id/g3n" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:maxLines="1" android:ellipsize="end"
-            android:textColor="#FFFFFF" android:textSize="13sp" />
-        <TextView android:id="@+id/g3t" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:textColor="#FFBFA8FF" android:textStyle="bold" android:textSize="13sp" />
-    </LinearLayout>
-    <LinearLayout android:id="@+id/g4r" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp">
-        <TextView android:id="@+id/g4n" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:maxLines="1" android:ellipsize="end"
-            android:textColor="#FFFFFF" android:textSize="13sp" />
-        <TextView android:id="@+id/g4t" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:textColor="#FFBFA8FF" android:textStyle="bold" android:textSize="13sp" />
-    </LinearLayout>
-    <LinearLayout android:id="@+id/g5r" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp">
-        <TextView android:id="@+id/g5n" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:maxLines="1" android:ellipsize="end"
-            android:textColor="#FFFFFF" android:textSize="13sp" />
-        <TextView android:id="@+id/g5t" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:textColor="#FFBFA8FF" android:textStyle="bold" android:textSize="13sp" />
-    </LinearLayout>
-    <LinearLayout android:id="@+id/g6r" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:paddingTop="3dp" android:paddingBottom="3dp">
-        <TextView android:id="@+id/g6n" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:maxLines="1" android:ellipsize="end"
-            android:textColor="#FFFFFF" android:textSize="13sp" />
-        <TextView android:id="@+id/g6t" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:textColor="#FFBFA8FF" android:textStyle="bold" android:textSize="13sp" />
-    </LinearLayout>
-</LinearLayout>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <!-- Kartın yüksekliği oyun sayısına göre kodla ayarlanır; fazlası kaydırılır -->
+    <FrameLayout android:id="@+id/card" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:layout_gravity="top">
+        <ImageView android:id="@+id/bg" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:scaleType="fitXY" android:src="@drawable/widget_bg_white" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+            android:orientation="vertical" android:padding="12dp">
+            <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:textStyle="bold" android:textSize="14sp" android:paddingBottom="6dp"
+                android:paddingLeft="2dp" android:paddingRight="2dp" android:maxLines="1" android:ellipsize="end" />
+            <ListView android:id="@+id/list" android:layout_width="match_parent" android:layout_height="0dp"
+                android:layout_weight="1" android:divider="@null" android:dividerHeight="0dp"
+                android:scrollbars="none" android:overScrollMode="never" />
+            <TextView android:id="@+id/empty" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Henüz oyun yok" android:textSize="12sp" android:paddingLeft="2dp" />
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

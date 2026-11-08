@@ -8,23 +8,41 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.os.StatFs
-import android.view.View
+import android.util.TypedValue
 import android.widget.RemoteViews
+import android.widget.RemoteViewsService
 import java.util.Locale
+import kotlin.math.min
+import kotlin.math.sqrt
+
+// ------------------------------------------------------------------ Sağlayıcılar
 
 class GamesWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
-        ids.forEach { mgr.updateAppWidget(it, WidgetUi.games(context)) }
+        ids.forEach { mgr.updateAppWidget(it, WidgetUi.games(context, mgr, it)) }
+        mgr.notifyAppWidgetViewDataChanged(ids, R.id.list)
+    }
+
+    override fun onAppWidgetOptionsChanged(context: Context, mgr: AppWidgetManager, id: Int, newOptions: Bundle) {
+        mgr.updateAppWidget(id, WidgetUi.games(context, mgr, id))
+        mgr.notifyAppWidgetViewDataChanged(intArrayOf(id), R.id.list)
     }
 }
 
 class TempWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
-        ids.forEach { mgr.updateAppWidget(it, WidgetUi.temps(context, it)) }
+        ids.forEach { mgr.updateAppWidget(it, WidgetUi.temps(context, mgr, it)) }
+    }
+
+    override fun onAppWidgetOptionsChanged(context: Context, mgr: AppWidgetManager, id: Int, newOptions: Bundle) {
+        mgr.updateAppWidget(id, WidgetUi.temps(context, mgr, id))
     }
 }
 
@@ -34,15 +52,67 @@ class InfoWidget : AppWidgetProvider() {
     }
 }
 
+// ------------------------------------------------------------------ Kaydırılabilir oyun listesi
+
+class GamesListService : RemoteViewsService() {
+    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = GamesFactory(applicationContext)
+}
+
+private class GamesFactory(private val ctx: Context) : RemoteViewsService.RemoteViewsFactory {
+    private data class Row(val pkg: String, val name: String, val time: String)
+
+    private var rows: List<Row> = emptyList()
+    private var style: WStyle = WidgetStyle.load(ctx)
+
+    override fun onCreate() {}
+    override fun onDestroy() {}
+
+    override fun onDataSetChanged() {
+        style = WidgetStyle.load(ctx)
+        val store = Store(ctx)
+        val sessions = store.loadSessions()
+        rows = store.loadGames()
+            .map { it to playedMs(sessions, it.pkg, Range.ALL) }
+            .sortedByDescending { it.second }
+            .map { Row(it.first.pkg, it.first.name, fmtDur(it.second)) }
+    }
+
+    override fun getCount() = rows.size
+
+    override fun getViewAt(position: Int): RemoteViews {
+        val rv = RemoteViews(ctx.packageName, R.layout.widget_games_item)
+        val r = rows.getOrNull(position) ?: return rv
+        rv.setTextViewText(R.id.name, r.name)
+        rv.setTextViewText(R.id.time, r.time)
+        rv.setTextColor(R.id.name, style.text)
+        rv.setTextColor(R.id.time, style.accent)
+        val icon = WidgetGfx.appIcon(ctx, r.pkg)
+        if (icon != null) rv.setImageViewBitmap(R.id.icon, icon)
+        rv.setOnClickFillInIntent(R.id.row, Intent())
+        return rv
+    }
+
+    override fun getLoadingView(): RemoteViews? = null
+    override fun getViewTypeCount() = 1
+    override fun getItemId(position: Int) = position.toLong()
+    override fun hasStableIds() = false
+}
+
+// ------------------------------------------------------------------ Çizim
+
 object WidgetUi {
 
-    /** Uygulama açıldığında / senkronda tüm widget'ları yeniler. */
+    /** Uygulama açıldığında / senkronda / renk değişince tüm widget'ları yeniler. */
     fun updateAll(ctx: Context) {
         runCatching {
             val mgr = AppWidgetManager.getInstance(ctx)
-            mgr.getAppWidgetIds(ComponentName(ctx, GamesWidget::class.java)).forEach { mgr.updateAppWidget(it, games(ctx)) }
-            mgr.getAppWidgetIds(ComponentName(ctx, TempWidget::class.java)).forEach { mgr.updateAppWidget(it, temps(ctx, it)) }
-            mgr.getAppWidgetIds(ComponentName(ctx, InfoWidget::class.java)).forEach { mgr.updateAppWidget(it, info(ctx)) }
+            val g = mgr.getAppWidgetIds(ComponentName(ctx, GamesWidget::class.java))
+            g.forEach { mgr.updateAppWidget(it, games(ctx, mgr, it)) }
+            if (g.isNotEmpty()) mgr.notifyAppWidgetViewDataChanged(g, R.id.list)
+            mgr.getAppWidgetIds(ComponentName(ctx, TempWidget::class.java))
+                .forEach { mgr.updateAppWidget(it, temps(ctx, mgr, it)) }
+            mgr.getAppWidgetIds(ComponentName(ctx, InfoWidget::class.java))
+                .forEach { mgr.updateAppWidget(it, info(ctx)) }
         }
     }
 
@@ -51,6 +121,14 @@ object WidgetUi {
             ctx, 0,
             Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+    /** Liste satırları için şablon (satır dokunuşları bunu kullanır) */
+    private fun openAppTemplate(ctx: Context): PendingIntent =
+        PendingIntent.getActivity(
+            ctx, 1,
+            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
 
     private fun refresh(ctx: Context, id: Int): PendingIntent =
@@ -70,82 +148,106 @@ object WidgetUi {
         return if (t == Int.MIN_VALUE) null else t / 10f
     }
 
-    private fun batteryLevel(ctx: Context): Int {
-        val i = batteryIntent(ctx) ?: return -1
-        val l = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-        val s = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
-        return if (l < 0) -1 else l * 100 / s
+    private fun t(v: Float?) = v?.let { String.format(Locale.US, "%.1f °C", it) } ?: "—"
+
+    /** Widget'ın şu anki boyutu (dp). Bilinmiyorsa 0. */
+    private fun sizeDp(ctx: Context, mgr: AppWidgetManager, id: Int): Pair<Int, Int> {
+        val o = mgr.getAppWidgetOptions(id)
+        val land = ctx.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val w = if (land) o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0) else o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+        val h = if (land) o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0) else o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)
+        return w to h
     }
 
-    private fun t(v: Float?) = v?.let { String.format(Locale.US, "%.1f °C", it) } ?: "—"
+    /** Zemin: beyaz şekle renk ve saydamlık uygular (köşeler yuvarlak kalır). */
+    private fun styleBg(rv: RemoteViews, st: WStyle) {
+        rv.setInt(R.id.bg, "setColorFilter", st.bg or (0xFF shl 24))
+        rv.setInt(R.id.bg, "setImageAlpha", st.alpha)
+    }
 
     // ---------------------------------------------------------- 1) Oyunlar ve süreler
 
-    fun games(ctx: Context): RemoteViews {
+    private const val HEADER_DP = 50  // kart iç boşlukları (12 + 12) + başlık satırı (~26)
+    private const val ROW_DP = 46     // widget_games_item satır yüksekliği
+
+    fun games(ctx: Context, mgr: AppWidgetManager, id: Int): RemoteViews {
         val rv = RemoteViews(ctx.packageName, R.layout.widget_games)
+        val st = WidgetStyle.load(ctx)
         val store = Store(ctx)
         val games = store.loadGames()
         val sessions = store.loadSessions()
-        val rows = listOf(
-            Triple(R.id.g1r, R.id.g1n, R.id.g1t), Triple(R.id.g2r, R.id.g2n, R.id.g2t),
-            Triple(R.id.g3r, R.id.g3n, R.id.g3t), Triple(R.id.g4r, R.id.g4n, R.id.g4t),
-            Triple(R.id.g5r, R.id.g5n, R.id.g5t), Triple(R.id.g6r, R.id.g6n, R.id.g6t)
-        )
-        val top = games.map { it to playedMs(sessions, it.pkg, Range.ALL) }.sortedByDescending { it.second }.take(rows.size)
+
+        styleBg(rv, st)
         rv.setTextViewText(R.id.title, "Oyunlarım • Bugün ${fmtDur(playedMs(sessions, null, Range.TODAY))}")
-        rv.setViewVisibility(R.id.empty, if (top.isEmpty()) View.VISIBLE else View.GONE)
-        rows.forEachIndexed { i, (r, n, tm) ->
-            if (i < top.size) {
-                rv.setViewVisibility(r, View.VISIBLE)
-                rv.setTextViewText(n, top[i].first.name)
-                rv.setTextViewText(tm, fmtDur(top[i].second))
-            } else rv.setViewVisibility(r, View.GONE)
+        rv.setTextColor(R.id.title, st.text)
+        rv.setTextColor(R.id.empty, st.textDim)
+
+        val svc = Intent(ctx, GamesListService::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+            data = Uri.fromParts("widget", id.toString(), null)
         }
-        rv.setOnClickPendingIntent(R.id.root, openApp(ctx))
+        rv.setRemoteAdapter(R.id.list, svc)
+        rv.setEmptyView(R.id.list, R.id.empty)
+        rv.setPendingIntentTemplate(R.id.list, openAppTemplate(ctx))
+        rv.setOnClickPendingIntent(R.id.title, openApp(ctx))
+
+        // Kart, oyun sayısı kadar yüksek olur; oyun çoksa widget boyunu doldurur ve liste kaydırılır.
+        if (Build.VERSION.SDK_INT >= 31) {
+            val need = HEADER_DP + (if (games.isEmpty()) 24 else games.size * ROW_DP) + 2
+            val avail = sizeDp(ctx, mgr, id).second
+            val h = if (avail > 0) min(need, avail) else need
+            rv.setViewLayoutHeight(R.id.card, h.toFloat(), TypedValue.COMPLEX_UNIT_DIP)
+        }
         return rv
     }
 
-    // ---------------------------------------------------------- 2) Sıcaklıklar
+    // ---------------------------------------------------------- 2) Sıcaklıklar (Samsung tarzı hap)
 
-    fun temps(ctx: Context, id: Int): RemoteViews {
+    fun temps(ctx: Context, mgr: AppWidgetManager, id: Int): RemoteViews {
         val rv = RemoteViews(ctx.packageName, R.layout.widget_temps)
-        rv.setTextViewText(R.id.bat, t(batteryTemp(ctx)))
-        rv.setTextViewText(R.id.cpu, t(cpuTempC()))
-        val lv = batteryLevel(ctx)
-        rv.setTextViewText(R.id.lvl, if (lv >= 0) "Şarj %$lv" else "")
+        val st = WidgetStyle.load(ctx)
+        val (wd, hd) = sizeDp(ctx, mgr, id)
+        val wDp = if (wd > 0) wd else 160
+        val hDp = if (hd > 0) hd else 72
+        val density = ctx.resources.displayMetrics.density
+        // Bitmap çok büyümesin (RemoteViews sınırı): en fazla ~250 bin piksel
+        val scale = min(density, sqrt(250_000f / (wDp * hDp)))
+        val bmp = WidgetGfx.tempsBitmap((wDp * scale).toInt(), (hDp * scale).toInt(), st, batteryTemp(ctx), cpuTempC())
+        rv.setImageViewBitmap(R.id.img, bmp)
         rv.setOnClickPendingIntent(R.id.root, refresh(ctx, id))
         return rv
     }
 
-    // ---------------------------------------------------------- 3) Telefon + son oynananlar + sıcaklık
+    // ---------------------------------------------------------- 3) Telefon özeti (RAM / depolama çubukları)
 
     fun info(ctx: Context): RemoteViews {
         val rv = RemoteViews(ctx.packageName, R.layout.widget_info)
+        val st = WidgetStyle.load(ctx)
         val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val mi = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
-        val st = StatFs(Environment.getDataDirectory().path)
-        val total = st.blockCountLong * st.blockSizeLong
-        val free = st.availableBlocksLong * st.blockSizeLong
+        val stat = StatFs(Environment.getDataDirectory().path)
+        val total = stat.blockCountLong * stat.blockSizeLong
+        val free = stat.availableBlocksLong * stat.blockSizeLong
 
+        styleBg(rv, st)
         rv.setTextViewText(R.id.iModel, "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}")
         rv.setTextViewText(R.id.iSys, "Android ${Build.VERSION.RELEASE} • SDK ${Build.VERSION.SDK_INT}")
-        rv.setTextViewText(R.id.iMem, "RAM ${gb(mi.totalMem)} (boş ${gb(mi.availMem)}) • Depolama ${gb(total)} (boş ${gb(free)})")
         rv.setTextViewText(R.id.iTemp, "Batarya ${t(batteryTemp(ctx))} • İşlemci ${t(cpuTempC())}")
 
-        val store = Store(ctx)
-        val sessions = store.loadSessions()
-        val recent = store.loadGames().filter { it.lastPlayed > 0 }.sortedByDescending { it.lastPlayed }.take(3)
-        val rows = listOf(
-            Triple(R.id.i1r, R.id.i1n, R.id.i1t), Triple(R.id.i2r, R.id.i2n, R.id.i2t), Triple(R.id.i3r, R.id.i3n, R.id.i3t)
-        )
-        rv.setViewVisibility(R.id.iEmpty, if (recent.isEmpty()) View.VISIBLE else View.GONE)
-        rows.forEachIndexed { i, (r, n, tm) ->
-            if (i < recent.size) {
-                rv.setViewVisibility(r, View.VISIBLE)
-                rv.setTextViewText(n, recent[i].name)
-                rv.setTextViewText(tm, fmtDur(playedMs(sessions, recent[i].pkg, Range.ALL)))
-            } else rv.setViewVisibility(r, View.GONE)
-        }
+        val ramUsed = mi.totalMem - mi.availMem
+        val stoUsed = total - free
+        rv.setTextViewText(R.id.iRamV, "${gb(ramUsed)} / ${gb(mi.totalMem)}")
+        rv.setTextViewText(R.id.iStoV, "${gb(stoUsed)} / ${gb(total)}")
+        rv.setImageViewBitmap(R.id.iRamBar, WidgetGfx.barBitmap(ramUsed.toFloat() / mi.totalMem.coerceAtLeast(1), st))
+        rv.setImageViewBitmap(R.id.iStoBar, WidgetGfx.barBitmap(stoUsed.toFloat() / total.coerceAtLeast(1), st))
+
+        rv.setTextColor(R.id.iModel, st.text)
+        rv.setTextColor(R.id.iSys, st.textDim)
+        rv.setTextColor(R.id.iRamL, st.text)
+        rv.setTextColor(R.id.iStoL, st.text)
+        rv.setTextColor(R.id.iRamV, st.textDim)
+        rv.setTextColor(R.id.iStoV, st.textDim)
+        rv.setTextColor(R.id.iTemp, st.accent)
         rv.setOnClickPendingIntent(R.id.root, openApp(ctx))
         return rv
     }
