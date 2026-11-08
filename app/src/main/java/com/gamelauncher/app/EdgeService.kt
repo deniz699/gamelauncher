@@ -58,6 +58,7 @@ class EdgeService : Service() {
     private var panelApp: String? = null   // panelden açılan uygulama; üstünde durduğu sürece çizgi kalır
     private var panelOwner: String? = null // panelin açıldığı oyun; pencere kapanınca oyuna dönülmüş sayılır
     private var panelLaunchTs = 0L
+    private var lastCleaned: String? = null   // otomatik RAM temizliği yapılan son oyun
     private val density get() = resources.displayMetrics.density
 
     // Oyun içi göstergeler
@@ -166,8 +167,14 @@ class EdgeService : Service() {
             panelApp = null; panelOwner = null
         }
         syncHud()
+        // Oyun açılınca bir kez RAM temizle (oyunun kendisi korunur)
+        if (cur != null && cur in gamePkgs) {
+            if (EdgePrefs.autoClean(this) && lastCleaned != cur) { lastCleaned = cur; Booster.clean(this, setOf(cur)) { } }
+        } else if (cur != null && cur != panelApp) {
+            lastCleaned = null
+        }
         val show = EdgePrefs.edgeOn(this) && cur != null && (cur in gamePkgs || cur == panelApp)
-        if (!EdgePrefs.edgeOn(this) && !EdgePrefs.hudAny(this)) { stopSelf(); return }
+        if (!EdgePrefs.edgeOn(this) && !EdgePrefs.hudAny(this) && !EdgePrefs.autoClean(this)) { stopSelf(); return }
         if (show && handleView != null && handleSig != edgeSig()) removeHandle()   // ayar değişti: yeniden çiz
         if (show && handleView == null && panelView == null) addHandle()
         if (!show) { removeHandle(); closePanel() }
@@ -453,6 +460,24 @@ class EdgeService : Service() {
             orientation = LinearLayout.VERTICAL
             setPadding((6 * d).toInt(), (10 * d).toInt(), (6 * d).toInt(), (10 * d).toInt())
         }
+        // RAM temizle düğmesi
+        val cleanLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (30 * d).toInt()).apply {
+            setMargins((4 * d).toInt(), (3 * d).toInt(), (4 * d).toInt(), (3 * d).toInt())
+        }
+        list.addView(TextView(this).apply {
+            text = "⚡ Temizle"
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(0xFF201F27.toInt())
+            background = GradientDrawable().apply { setColor(0xFFFFD54F.toInt()); cornerRadius = 12 * d }
+            isClickable = true
+            setOnClickListener {
+                Booster.clean(this@EdgeService, setOfNotNull(fg)) {
+                    android.widget.Toast.makeText(this@EdgeService, it, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }, cleanLp)
         // Oyun içi bilgi düğmeleri
         val tl = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (30 * d).toInt()).apply {
             setMargins((4 * d).toInt(), (3 * d).toInt(), (4 * d).toInt(), (3 * d).toInt())

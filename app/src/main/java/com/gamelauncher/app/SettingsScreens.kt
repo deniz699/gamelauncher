@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -89,6 +90,22 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
                     )
                 }
             }
+            val iconCtx = LocalContext.current
+            var iconStatus by remember { mutableStateOf(IconSwitcher.state(iconCtx)) }
+            Text(
+                "Şu an: $iconStatus",
+                Modifier.padding(top = 8.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SoftButton(
+                "Simgeyi şimdi uygula",
+                {
+                    val err = IconSwitcher.sync(iconCtx)
+                    iconStatus = IconSwitcher.state(iconCtx) + (err?.let { " — HATA: $it" } ?: "")
+                },
+                Modifier.padding(top = 6.dp)
+            )
             Text(
                 "Simge, uygulamadan çıkınca (ana ekrana dönünce) güncellenir; Android ekrandayken değiştirirse uygulamayı kapatır. Bazı ana ekranlarda değişmesi birkaç saniye sürebilir.",
                 Modifier.padding(top = 6.dp),
@@ -144,7 +161,7 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
 // ====================================================================== Ayarlar (liste)
 
 private enum class Sub(val title: String) {
-    EDGE("Yan Panel"), UPDATES("Güncellemeler"), PERMS("İzinler"),
+    EDGE("Yan Panel"), PERF("Performans"), UPDATES("Güncellemeler"), PERMS("İzinler"),
     HELP("Yardım"), CONTACT("İletişim"), ABOUT("Hakkında")
 }
 
@@ -159,6 +176,7 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                 TopRow("Ayarlar", onClose)
                 Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 24.dp)) {
                     SettingsRow(Icons.Default.VerticalSplit, "Yan Panel", "Kenar paneli, FPS / sıcaklık göstergesi, uygulamalar") { sub = Sub.EDGE }
+                    SettingsRow(Icons.Default.FlashOn, "Performans", "RAM temizleme ve FPS ipuçları") { sub = Sub.PERF }
                     SettingsRow(Icons.Default.SystemUpdate, "Güncellemeler", "Sürüm ${Updater.current(LocalContext.current).name}") { sub = Sub.UPDATES }
                     SettingsRow(Icons.Default.Lock, "İzinler", if (s.hasUsage) "Kullanım erişimi verildi" else "Kullanım erişimi gerekli") { sub = Sub.PERMS }
                     SettingsRow(Icons.AutoMirrored.Filled.HelpOutline, "Yardım", "Sık sorulan sorular") { sub = Sub.HELP }
@@ -174,6 +192,7 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                 ) {
                     when (cur) {
                         Sub.EDGE -> EdgePage(s)
+                        Sub.PERF -> PerfPage(s)
                         Sub.UPDATES -> UpdatesPage()
                         Sub.PERMS -> PermissionsPage(s)
                         Sub.HELP -> HelpPage()
@@ -245,6 +264,68 @@ private fun EdgePage(s: AppState) {
     }
     EdgePanelSettings()
     HudSection(s)
+}
+
+// ====================================================================== Performans
+
+@Composable
+private fun PerfPage(s: AppState) {
+    val ctx = LocalContext.current
+    var msg by remember { mutableStateOf<String?>(null) }
+    var auto by remember { mutableStateOf(EdgePrefs.autoClean(ctx)) }
+    val pwr = ctx.getSystemService(android.os.PowerManager::class.java)
+    val cs = MaterialTheme.colorScheme
+
+    Text("RAM temizle", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall)
+    Text(
+        "Arka plandaki uygulamaları kapattırarak boş RAM'i artırır. Ana sayfadaki ⚡ simgesi ve yan paneldeki \"Temizle\" düğmesi de aynısını yapar. " +
+            "Kazanç sınırlıdır; Android bazı uygulamaları kendisi yeniden başlatır.",
+        Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+    )
+    SoftButton("RAM'i şimdi temizle", { Booster.clean(ctx, emptySet()) { msg = it } }, Modifier.padding(top = 8.dp))
+    msg?.let { Text(it, Modifier.padding(top = 6.dp)) }
+
+    HudSwitch("Oyun açılınca otomatik temizle", "Bir oyun ön plana gelince bir kez RAM temizlenir. Üstte gösterme ve kullanım erişimi izinleri gerekir.", auto) { on ->
+        if (on && !Settings.canDrawOverlays(ctx)) {
+            ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName)))
+        } else {
+            auto = on; EdgePrefs.setAutoClean(ctx, on); s.applyEdge()
+        }
+    }
+
+    Text("Güç tasarrufu", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleSmall)
+    Text(
+        if (pwr?.isPowerSaveMode == true) "Açık — işlemciyi ve yenileme hızını kısar, FPS düşer. Oynarken kapat."
+        else "Kapalı ✓",
+        Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+    )
+    SoftButton("Pil ayarlarını aç", { runCatching { ctx.startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) } }, Modifier.padding(top = 8.dp))
+
+    Text("Ekran yenileme hızı", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleSmall)
+    Text(
+        "Telefonun ekranı 90/120 Hz destekliyorsa Ekran ayarlarında \"Hareket yumuşaklığı\"nı yüksek yap; oyun uyarlanabilirde düşük hızda kalabilir.",
+        Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+    )
+    SoftButton("Ekran ayarlarını aç", { runCatching { ctx.startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS)) } }, Modifier.padding(top = 8.dp))
+
+    if (android.os.Build.VERSION.SDK_INT >= 29 && pwr != null) {
+        val hot = pwr.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_MODERATE
+        Text("Isınma", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleSmall)
+        Text(
+            if (hot) "Telefon ısınmış — sistem performansı kısıyor, FPS düşebilir. Kılıfı çıkar, şarjı çıkar, kısa mola ver."
+            else "Normal ✓",
+            Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+        )
+    }
+
+    Text("Diğer ipuçları", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleSmall)
+    Text(
+        "• Oyunun içindeki grafik ayarını düşür; FPS'e en çok bu etki eder.\n" +
+            "• Şarj ederken oynama; ısınma FPS'i düşürür.\n" +
+            "• Telefonun oyun modu varsa (ör. Game Booster) oyunu orada performans moduna al.\n" +
+            "• Depolama doluysa biraz boşalt.",
+        Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+    )
 }
 
 // ====================================================================== Oyun içi bilgi (Yan Panel sayfasının içinde)

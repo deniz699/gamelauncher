@@ -170,7 +170,7 @@ class AppState(private val ctx: Context) {
 
     fun applyEdge() {
         val i = Intent(ctx, EdgeService::class.java)
-        if ((edge || EdgePrefs.hudAny(ctx)) && Settings.canDrawOverlays(ctx) && UsageSync.hasPermission(ctx)) {
+        if ((edge || EdgePrefs.hudAny(ctx) || EdgePrefs.autoClean(ctx)) && Settings.canDrawOverlays(ctx) && UsageSync.hasPermission(ctx)) {
             runCatching { ContextCompat.startForegroundService(ctx, i) }
         } else {
             ctx.stopService(i)
@@ -279,26 +279,35 @@ class AppState(private val ctx: Context) {
 
 /** Ana ekran simgesi: iki activity-alias'tan yalnızca biri açık tutulur. */
 object IconSwitcher {
-    fun sync(ctx: Context) {
-        val p = ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-        val wantDark = p.getBoolean("icon_dark", false)
-        val pm = ctx.packageManager
-        val light = ComponentName(ctx.packageName, "com.gamelauncher.app.IconLight")
-        val dark = ComponentName(ctx.packageName, "com.gamelauncher.app.IconDark")
-        fun on(c: ComponentName, default: Boolean): Boolean = when (pm.getComponentEnabledSetting(c)) {
+    private const val LIGHT = "com.gamelauncher.app.IconLight"
+    private const val DARK = "com.gamelauncher.app.IconDark"
+
+    private fun on(ctx: Context, cls: String, default: Boolean): Boolean =
+        when (ctx.packageManager.getComponentEnabledSetting(ComponentName(ctx.packageName, cls))) {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
             PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> default
             else -> false
         }
-        if (on(dark, false) == wantDark && on(light, true) == !wantDark) return
-        fun set(c: ComponentName, enable: Boolean) = pm.setComponentEnabledSetting(
-            c,
+
+    /** Şu an hangi simge açık (tanı için). */
+    fun state(ctx: Context): String = runCatching {
+        "Beyaz ${if (on(ctx, LIGHT, true)) "açık" else "kapalı"}, Siyah ${if (on(ctx, DARK, false)) "açık" else "kapalı"}"
+    }.getOrElse { "okunamadı: ${it.javaClass.simpleName}" }
+
+    /** Seçime göre simgeyi eşitler. Hata olursa mesajını döndürür, yoksa null. */
+    fun sync(ctx: Context): String? {
+        val wantDark = ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE).getBoolean("icon_dark", false)
+        if (on(ctx, DARK, false) == wantDark && on(ctx, LIGHT, true) == !wantDark) return null
+        val pm = ctx.packageManager
+        fun set(cls: String, enable: Boolean) = pm.setComponentEnabledSetting(
+            ComponentName(ctx.packageName, cls),
             if (enable) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
             PackageManager.DONT_KILL_APP
         )
-        runCatching {
+        return runCatching {
             // Önce yenisini aç, sonra eskisini kapat: simge hiç kaybolmasın
-            if (wantDark) { set(dark, true); set(light, false) } else { set(light, true); set(dark, false) }
-        }
+            if (wantDark) { set(DARK, true); set(LIGHT, false) } else { set(LIGHT, true); set(DARK, false) }
+            null
+        }.getOrElse { "${it.javaClass.simpleName}: ${it.message}" }
     }
 }

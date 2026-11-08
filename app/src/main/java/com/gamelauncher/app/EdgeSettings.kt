@@ -70,6 +70,8 @@ object EdgePrefs {
     fun hudAny(ctx: Context): Boolean = hudFps(ctx) || hudBat(ctx) || hudCpu(ctx)
     fun hudPos(ctx: Context): Int = p(ctx).getInt("hud_pos", 0)          // 0 üst sol, 1 üst orta, 2 üst sağ
     fun setHudPos(ctx: Context, v: Int) = p(ctx).edit().putInt("hud_pos", v).apply()
+    fun autoClean(ctx: Context): Boolean = p(ctx).getBoolean("auto_clean", false)
+    fun setAutoClean(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("auto_clean", v).apply()
     fun edgeOn(ctx: Context): Boolean = p(ctx).getBoolean("edge", false)
 
     fun apps(ctx: Context): List<String> =

@@ -134,6 +134,9 @@ fun App(s: AppState) {
                         actionIconContentColor = onBgColor()
                     ),
                     actions = {
+                        IconButton(onClick = {
+                            Booster.clean(ctx, emptySet()) { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show() }
+                        }) { Icon(Icons.Default.FlashOn, "RAM temizle") }
                         IconButton(onClick = { showAppearance = true }) { Icon(Icons.Default.Edit, "Görünümü düzenle") }
                         IconButton(onClick = { showDevice = true }) {
                             Icon(Icons.Default.PhoneAndroid, "Cihaz bilgileri")
