@@ -5,11 +5,14 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.File
+import kotlin.concurrent.thread
 
 class AppState(private val ctx: Context) {
     private val store = Store(ctx)
@@ -22,10 +25,12 @@ class AppState(private val ctx: Context) {
     var themeMode by mutableIntStateOf(prefs.getInt("theme", 0)) // 0 sistem, 1 açık, 2 koyu, 3 AMOLED
     var accent by mutableIntStateOf(prefs.getInt("accent", 0))
     var dynamic by mutableStateOf(prefs.getBoolean("dynamic", false))
+    var glass by mutableStateOf(prefs.getBoolean("glass", true))
     var sort by mutableStateOf(
         runCatching { SortMode.valueOf(prefs.getString("sort", "MANUAL")!!) }.getOrDefault(SortMode.MANUAL)
     )
 
+    fun changeGlass(v: Boolean) { glass = v; prefs.edit().putBoolean("glass", v).apply() }
     fun setTheme(v: Int) { themeMode = v; prefs.edit().putInt("theme", v).apply() }
     @JvmName("applyAccent") fun setAccent(v: Int) { accent = v; prefs.edit().putInt("accent", v).apply() }
     @JvmName("applyDynamic") fun setDynamic(v: Boolean) { dynamic = v; prefs.edit().putBoolean("dynamic", v).apply() }
@@ -54,10 +59,14 @@ class AppState(private val ctx: Context) {
             val (s, _) = UsageSync.collect(ctx, setOf(pkg), System.currentTimeMillis() - 7 * 86_400_000L)
             mergeSessions(s)
         }
+        fetchCovers()
     }
 
     fun remove(pkg: String) {
-        games.find { it.pkg == pkg }?.cover?.let { File(it).delete() }
+        games.find { it.pkg == pkg }?.let { g ->
+            g.cover?.let { File(it).delete() }
+            g.autoCover?.let { File(it).delete() }
+        }
         games = games.filter { it.pkg != pkg }
         sessions = sessions.filter { it.pkg != pkg }
         store.saveGames(games); store.saveSessions(sessions)
@@ -118,11 +127,56 @@ class AppState(private val ctx: Context) {
 
     /** Uygulama her öne geldiğinde çağrılır */
     fun sync() {
+        fetchCovers()
         hasUsage = UsageSync.hasPermission(ctx)
         if (!hasUsage) return
         val last = prefs.getLong("lastSync", System.currentTimeMillis() - 7 * 86_400_000L)
         val (s, next) = UsageSync.collect(ctx, games.map { it.pkg }.toSet(), last)
         prefs.edit().putLong("lastSync", next).apply()
         mergeSessions(s)
+    }
+
+    // ---------- İnternetten otomatik kapak ----------
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val fetching = HashSet<String>()
+
+    /** Kapağı olmayan oyunlar için internetten görsel çeker; internet yoksa uygulama simgesi kalır. */
+    fun fetchCovers() {
+        val now = System.currentTimeMillis()
+        games.filter { it.cover == null && it.autoCover == null }.forEach { g ->
+            if (now - prefs.getLong("tried_${g.pkg}", 0L) < 6 * 3_600_000L) return@forEach
+            if (!fetching.add(g.pkg)) return@forEach
+            thread {
+                var bytes: ByteArray? = null
+                var reachable = true
+                try {
+                    bytes = CoverFetcher.fetch(g.name, g.pkg)
+                } catch (e: Exception) {
+                    reachable = false
+                }
+                mainHandler.post {
+                    fetching.remove(g.pkg)
+                    if (reachable) prefs.edit().putLong("tried_${g.pkg}", System.currentTimeMillis()).apply()
+                    bytes?.let { saveAuto(g.pkg, it) }
+                }
+            }
+        }
+    }
+
+    private fun saveAuto(pkg: String, bytes: ByteArray) {
+        runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (bounds.outWidth / sample > 1000) sample *= 2
+            val bmp = BitmapFactory.decodeByteArray(
+                bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }
+            ) ?: return
+            val dir = File(ctx.filesDir, "covers").apply { mkdirs() }
+            val f = File(dir, "auto_${pkg}_${System.currentTimeMillis()}.jpg")
+            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+            games.find { it.pkg == pkg }?.autoCover?.let { File(it).delete() }
+            update(pkg) { it.copy(autoCover = f.absolutePath) }
+        }
     }
 }

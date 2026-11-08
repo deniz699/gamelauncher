@@ -18,7 +18,8 @@ data class Game(
     val cover: String? = null,
     val favorite: Boolean = false,
     val addedAt: Long,
-    val lastPlayed: Long = 0L
+    val lastPlayed: Long = 0L,
+    val autoCover: String? = null
 )
 
 data class Session(val pkg: String, val start: Long, val end: Long)
@@ -49,7 +50,8 @@ class Store(ctx: Context) {
                 cover = o.optString("cover").ifEmpty { null },
                 favorite = o.optBoolean("fav"),
                 addedAt = o.optLong("added"),
-                lastPlayed = o.optLong("last")
+                lastPlayed = o.optLong("last"),
+                autoCover = o.optString("auto").ifEmpty { null }
             )
         }
     }.getOrDefault(emptyList())
@@ -59,7 +61,7 @@ class Store(ctx: Context) {
         list.forEach {
             a.put(
                 JSONObject().put("pkg", it.pkg).put("name", it.name).put("cover", it.cover ?: "")
-                    .put("fav", it.favorite).put("added", it.addedAt).put("last", it.lastPlayed)
+                    .put("fav", it.favorite).put("added", it.addedAt).put("last", it.lastPlayed).put("auto", it.autoCover ?: "")
             )
         }
         gamesFile.writeText(a.toString())

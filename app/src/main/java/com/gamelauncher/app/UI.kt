@@ -81,40 +81,47 @@ fun App(s: AppState) {
                     IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Ayarlar") }
                 }
             )
-        },
-        bottomBar = {
-            NavigationBar {
-                tabs.forEachIndexed { i, (label, icon) ->
-                    NavigationBarItem(
-                        selected = tab == i, onClick = { tab = i },
-                        icon = { Icon(icon, null) }, label = { Text(label) }
-                    )
-                }
-            }
-        },
-        floatingActionButton = {
-            if (tab != 2) FloatingActionButton(onClick = { showAdd = true }) { Icon(Icons.Default.Add, "Oyun ekle") }
         }
     ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad)) {
-            if (!s.hasUsage) {
-                Card(Modifier.fillMaxWidth().padding(12.dp, 8.dp)) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Oynama süresini takip edebilmek için \"Kullanım erişimi\" izni gerekli.",
-                            Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium
-                        )
-                        TextButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }) {
-                            Text("İzin ver")
+        Box(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding())) {
+            Column(Modifier.fillMaxSize()) {
+                if (!s.hasUsage) {
+                    Card(Modifier.fillMaxWidth().padding(12.dp, 8.dp)) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Oynama süresini takip edebilmek için \"Kullanım erişimi\" izni gerekli.",
+                                Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium
+                            )
+                            TextButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }) {
+                                Text("İzin ver")
+                            }
                         }
                     }
                 }
+                when (tab) {
+                    0 -> GameGrid(s, s.sortedGames(), "Henüz oyun yok. Sağ alttaki + ile oyun ekle.") { selected = it }
+                    1 -> GameGrid(s, s.sortedGames().filter { it.favorite }, "Favori oyun yok. Kalbe dokunarak ekle.") { selected = it }
+                    else -> StatsTab(s)
+                }
             }
-            when (tab) {
-                0 -> GameGrid(s, s.sortedGames(), "Henüz oyun yok. Sağ alttaki + ile oyun ekle.") { selected = it }
-                1 -> GameGrid(s, s.sortedGames().filter { it.favorite }, "Favori oyun yok. Kalbe dokunarak ekle.") { selected = it }
-                else -> StatsTab(s)
+
+            if (tab != 2) {
+                FloatingActionButton(
+                    onClick = { showAdd = true },
+                    modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
+                        .padding(end = 24.dp, bottom = 104.dp)
+                ) { Icon(Icons.Default.Add, "Oyun ekle") }
             }
+
+            GlassBottomBar(
+                items = tabs,
+                selected = tab,
+                glass = s.glass,
+                onSelect = { tab = it },
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 14.dp)
+                    .widthIn(max = 420.dp).fillMaxWidth().height(64.dp)
+            )
         }
     }
 
@@ -133,7 +140,7 @@ fun GameGrid(s: AppState, list: List<Game>, emptyText: String, onOpen: (String) 
     }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(150.dp),
-        contentPadding = PaddingValues(12.dp, 12.dp, 12.dp, 96.dp),
+        contentPadding = PaddingValues(12.dp, 12.dp, 12.dp, 140.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -183,9 +190,10 @@ private fun loadCover(path: String): ImageBitmap? = runCatching {
 }.getOrNull()
 
 @Composable
-fun Cover(g: Game, modifier: Modifier) {
+fun Cover(g: Game, modifier: Modifier, iconFraction: Float = 0.5f) {
     val ctx = LocalContext.current
-    val cover = remember(g.cover) { g.cover?.let { loadCover(it) } }
+    val path = g.cover ?: g.autoCover
+    val cover = remember(path) { path?.let { loadCover(it) } }
     if (cover != null) {
         Image(cover, g.name, modifier, contentScale = ContentScale.Crop)
     } else {
@@ -193,7 +201,7 @@ fun Cover(g: Game, modifier: Modifier) {
             runCatching { ctx.packageManager.getApplicationIcon(g.pkg).toBitmap(192, 192).asImageBitmap() }.getOrNull()
         }
         Box(modifier.background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-            if (icon != null) Image(icon, g.name, Modifier.fillMaxSize(0.5f))
+            if (icon != null) Image(icon, g.name, Modifier.fillMaxSize(iconFraction))
         }
     }
 }
@@ -347,17 +355,22 @@ fun StatsTab(s: AppState) {
         Text("Oyun başına", style = MaterialTheme.typography.titleMedium)
         s.games.sortedByDescending { playedMs(s.sessions, it.pkg, Range.ALL) }.forEach { g ->
             Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(g.name, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        listOf(Range.TODAY, Range.WEEK, Range.YEAR, Range.ALL)
-                            .joinToString("  •  ") { "${it.label}: ${fmtDur(playedMs(s.sessions, g.pkg, it))}" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Cover(g, Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)), 0.85f)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(g.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            listOf(Range.TODAY, Range.WEEK, Range.YEAR, Range.ALL)
+                                .joinToString("  •  ") { "${it.label}: ${fmtDur(playedMs(s.sessions, g.pkg, it))}" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
+        Spacer(Modifier.height(120.dp))
     }
 }
 
@@ -376,6 +389,11 @@ fun SettingsSheet(s: AppState, onClose: () -> Unit) {
                 listOf("Sistem", "Açık", "Koyu", "AMOLED").forEachIndexed { i, label ->
                     FilterChip(selected = s.themeMode == i, onClick = { s.setTheme(i) }, label = { Text(label) })
                 }
+            }
+
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Liquid glass alt çubuk", Modifier.weight(1f))
+                Switch(checked = s.glass, onCheckedChange = { s.changeGlass(it) })
             }
 
             if (android.os.Build.VERSION.SDK_INT >= 31) {
