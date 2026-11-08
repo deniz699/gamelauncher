@@ -156,7 +156,7 @@ class AppState(private val ctx: Context) {
         update(pkg) { it.copy(cover = null) }
     }
 
-    fun setBgBlur(v: Boolean) { bgBlur = v; prefs.edit().putBoolean("bgblur", v).apply() }
+    fun changeBgBlur(v: Boolean) { bgBlur = v; prefs.edit().putBoolean("bgblur", v).apply() }
 
     /** Galeriden seçilen görseli uygulama duvar kağıdı yapar. */
     fun setBackground(uri: Uri) {

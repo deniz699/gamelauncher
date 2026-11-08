@@ -496,7 +496,7 @@ fun SettingsSheet(s: AppState, onClose: () -> Unit) {
             }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Arka planı bulanıklaştır", Modifier.weight(1f))
-                Switch(checked = s.bgBlur, onCheckedChange = { s.setBgBlur(it) })
+                Switch(checked = s.bgBlur, onCheckedChange = { s.changeBgBlur(it) })
             }
 
             Text("Süre takibi", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
