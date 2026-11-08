@@ -49,6 +49,8 @@ class EdgeService : Service() {
     private var counter = 0
     private var handleSig = ""
     private var panelApp: String? = null   // panelden açılan uygulama; üstünde durduğu sürece çizgi kalır
+    private var panelOwner: String? = null // panelin açıldığı oyun; pencere kapanınca oyuna dönülmüş sayılır
+    private var panelLaunchTs = 0L
     private val density get() = resources.displayMetrics.density
 
     private val poll = object : Runnable {
@@ -107,7 +109,12 @@ class EdgeService : Service() {
             ev.getNextEvent(e)
             when (e.eventType) {
                 UsageEvents.Event.MOVE_TO_FOREGROUND -> fg = e.packageName
-                UsageEvents.Event.MOVE_TO_BACKGROUND -> if (e.packageName == fg) fg = null
+                UsageEvents.Event.MOVE_TO_BACKGROUND -> if (e.packageName == fg) {
+                    // Panelden açılan pencere kapandı: oyun zaten arkada açıktı ve sistem ona yeni bir
+                    // "ön plana geldi" olayı göndermez; bu yüzden oyuna dönüldüğünü biz varsayarız.
+                    // (Ana ekrana çıkıldıysa hemen ardından gelen launcher olayı bunu düzeltir.)
+                    fg = if (e.packageName == panelApp && panelOwner != null) panelOwner else null
+                }
             }
         }
         lastEvent = now - 1000
@@ -119,7 +126,11 @@ class EdgeService : Service() {
         runCatching { pollForeground() }
         val cur = fg
         // Panelden açılan uygulama ön plana geçene kadar beklenir; başka bir uygulamaya geçilirse sıfırlanır
-        if (cur != null && cur !in gamePkgs && cur != panelApp) panelApp = null
+        if (cur != null && cur !in gamePkgs && cur != panelApp) { panelApp = null; panelOwner = null }
+        // Oyun yeniden ön plandaysa (ve açılış gecikmesi geçtiyse) panel oturumu bitmiştir
+        if (cur != null && cur in gamePkgs && System.currentTimeMillis() - panelLaunchTs > 4000) {
+            panelApp = null; panelOwner = null
+        }
         val show = cur != null && (cur in gamePkgs || cur == panelApp)
         if (show && handleView != null && handleSig != edgeSig()) removeHandle()   // ayar değişti: yeniden çiz
         if (show && handleView == null && panelView == null) addHandle()
@@ -361,6 +372,8 @@ class EdgeService : Service() {
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         closePanel()
         panelApp = pkg
+        panelOwner = fg?.takeIf { it in gamePkgs }
+        panelLaunchTs = System.currentTimeMillis()
         if (popup) {
             // Kare pencere: kısa kenarın %72'si, ekranın ortasında (oyun yatay olsa da kare kalır)
             val (sw, sh) = screenSize()
