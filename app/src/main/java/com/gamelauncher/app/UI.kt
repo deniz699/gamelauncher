@@ -333,10 +333,9 @@ fun AddSheet(s: AppState, onClose: () -> Unit) {
 
     ModalBottomSheet(
         onDismissRequest = onClose,
-        containerColor = glassColor(),
-        scrimColor = Color.Black.copy(alpha = 0.2f)
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
-        GlassBlurBehind()
         Column(Modifier.fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {
             Text("Oyun ekle", style = MaterialTheme.typography.titleLarge)
             Text(
