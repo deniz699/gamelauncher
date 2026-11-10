@@ -143,7 +143,7 @@ fun EdgePanelSettings() {
 
         ModalBottomSheet(
             onDismissRequest = { picker = false },
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.background,
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
             Column(Modifier.fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {
@@ -153,23 +153,7 @@ fun EdgePanelSettings() {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                TextField(
-                    value = query, onValueChange = { query = it }, singleLine = true,
-                    placeholder = { Text("Uygulama ara") },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Temizle") }
-                        }
-                    },
-                    shape = RoundedCornerShape(28.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent
-                    ),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
-                )
+                FlatSearchField(query, { query = it }, "Uygulama ara", Modifier.padding(vertical = 10.dp))
                 LazyColumn {
                     items(shown, key = { it.pkg }) { a ->
                         val checked = a.pkg in apps

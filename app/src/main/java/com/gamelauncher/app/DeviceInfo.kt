@@ -112,6 +112,7 @@ private fun rows(ctx: Context): List<Pair<String, List<Pair<String, String>>>> {
 @Composable
 fun DevicePage(onClose: () -> Unit) {
     val ctx = LocalContext.current
+    val cs = MaterialTheme.colorScheme
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -122,28 +123,24 @@ fun DevicePage(onClose: () -> Unit) {
     val data = remember(tick) { rows(ctx) }
 
     BackHandler(onBack = onClose)
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(4.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri") }
-                Text("Cihaz bilgileri", style = MaterialTheme.typography.titleLarge)
-            }
+            ScreenTopBar("Cihaz bilgileri", onClose)
             Column(
                 Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
-                    .padding(bottom = 24.dp).navigationBarsPadding()
+                    .padding(bottom = 24.dp).navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 data.forEach { (title, items) ->
-                    Text(
-                        title, Modifier.padding(top = 16.dp, bottom = 4.dp),
-                        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary
-                    )
-                    items.forEach { (k, v) ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(k, Modifier.padding(end = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(v, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
+                    FlatCard {
+                        Text(title, style = MaterialTheme.typography.titleMedium, color = cs.primary)
+                        items.forEach { (k, v) ->
+                            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(k, Modifier.padding(end = 12.dp), color = cs.onSurfaceVariant)
+                                Text(v, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
+                            }
                         }
                     }
-                    HorizontalDivider(Modifier.padding(top = 6.dp))
                 }
             }
         }

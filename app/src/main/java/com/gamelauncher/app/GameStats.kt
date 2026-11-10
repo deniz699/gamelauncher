@@ -165,10 +165,7 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
 
     Surface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(4.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri") }
-                Text(g.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+            ScreenTopBar(g.name, onClose)
             Column(
                 Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
                     .padding(bottom = 24.dp).navigationBarsPadding()
@@ -194,8 +191,8 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
                 }
 
                 Column(
-                    Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(20.dp))
-                        .background(cs.surfaceContainerHigh).padding(16.dp)
+                    Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(24.dp))
+                        .background(cs.surfaceContainer).padding(18.dp)
                 ) {
                     Text(
                         if (sel >= 0) "${period.tips[sel]}  •  ${fmtDur(values[sel])}" else "Çubuğa dokunarak ayrıntıyı gör",
@@ -206,10 +203,12 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
                     BarChart(values, period.labels, period.every, sel) { sel = if (sel == it) -1 else it }
                 }
 
-                Spacer(Modifier.height(16.dp))
-                SummaryRow("Dönem toplamı", fmtDur(total))
+                Spacer(Modifier.height(12.dp))
                 val mx = values.indices.maxByOrNull { values[it] }
-                if (mx != null && values[mx] > 0) SummaryRow("En yoğun", "${period.tips[mx]} • ${fmtDur(values[mx])}")
+                FlatCard(pad = 16.dp) {
+                    SummaryRow("Dönem toplamı", fmtDur(total))
+                    if (mx != null && values[mx] > 0) SummaryRow("En yoğun", "${period.tips[mx]} • ${fmtDur(values[mx])}")
+                }
                 Text(
                     "Geçmiş veriler, uygulamanın kayıt tutmaya başladığı günden itibaren görünür.",
                     Modifier.padding(top = 12.dp), fontSize = 11.sp, color = cs.onSurfaceVariant

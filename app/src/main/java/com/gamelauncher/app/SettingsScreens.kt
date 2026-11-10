@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -40,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -56,34 +58,61 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-// ====================================================================== Görünüm (ana sayfadaki kalem)
+// ====================================================================== Görünüm (ana sayfadaki palet)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
-    val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) s.setBackground(uri)
-    }
-    ModalBottomSheet(onDismissRequest = onClose) {
+    val cs = MaterialTheme.colorScheme
+    ModalBottomSheet(onDismissRequest = onClose, containerColor = cs.background, contentColor = cs.onSurface) {
         Column(
-            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp)
+            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)
                 .navigationBarsPadding()
         ) {
-            Text("Görünüm", style = MaterialTheme.typography.titleLarge)
+            Text("Görünüm", style = MaterialTheme.typography.headlineSmall)
 
-            Text("Tema", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
+            SectionLabel("Tema")
             SegmentedChoice(listOf("Sistem", "Açık", "Koyu", "AMOLED"), s.themeMode) { s.setTheme(it) }
 
-            Text("Uygulama simgesi", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                FlatCard(Modifier.padding(top = 16.dp), pad = 16.dp) {
+                    ToggleRow(
+                        "Telefonun renklerini kullan",
+                        "Uygulama renklerini telefonunun duvar kağıdına göre otomatik ayarlar (Material You). Açıkken vurgu rengi seçilemez.",
+                        s.dynamic, { s.setDynamic(it) }
+                    )
+                }
+            }
+
+            if (!s.dynamic || android.os.Build.VERSION.SDK_INT < 31) {
+                SectionLabel("Vurgu rengi")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    accents.forEachIndexed { i, c ->
+                        Box(
+                            Modifier.size(38.dp).clip(CircleShape).background(c).clickable { s.setAccent(i) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (s.accent == i) {
+                                Icon(
+                                    Icons.Default.Check, null, Modifier.size(20.dp),
+                                    tint = if (c.luminance() > 0.45f) Color(0xFF111111) else Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            SectionLabel("Uygulama simgesi")
             SegmentedChoice(listOf("Beyaz", "Siyah"), if (s.iconDark) 1 else 0) { s.setIconDark(it == 1) }
             val activeDark = s.iconDark
-            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 listOf(false to R.drawable.logo_white, true to R.drawable.logo_black).forEach { (isDark, res) ->
                     androidx.compose.foundation.Image(
                         painterResource(res), if (isDark) "Siyah simge" else "Beyaz simge",
-                        Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))
+                        Modifier.size(56.dp).clip(RoundedCornerShape(16.dp))
                             .then(
-                                if (activeDark == isDark) Modifier.border(BorderStroke(3.dp, MaterialTheme.colorScheme.primary), RoundedCornerShape(14.dp))
+                                if (activeDark == isDark) Modifier.border(BorderStroke(3.dp, cs.primary), RoundedCornerShape(16.dp))
                                 else Modifier
                             )
                     )
@@ -93,9 +122,9 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
             var iconStatus by remember { mutableStateOf(IconSwitcher.state(iconCtx)) }
             Text(
                 "Şu an: $iconStatus",
-                Modifier.padding(top = 8.dp),
+                Modifier.padding(top = 10.dp),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = cs.onSurfaceVariant
             )
             SoftButton(
                 "Simgeyi şimdi uygula",
@@ -103,56 +132,14 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
                     val err = IconSwitcher.sync(iconCtx)
                     iconStatus = IconSwitcher.state(iconCtx) + (err?.let { " — HATA: $it" } ?: "")
                 },
-                Modifier.padding(top = 6.dp)
+                Modifier.fillMaxWidth().padding(top = 10.dp)
             )
             Text(
                 "Simge, uygulamadan çıkınca (ana ekrana dönünce) güncellenir; Android ekrandayken değiştirirse uygulamayı kapatır. Bazı ana ekranlarda değişmesi birkaç saniye sürebilir.",
-                Modifier.padding(top = 6.dp),
+                Modifier.padding(top = 8.dp),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = cs.onSurfaceVariant
             )
-
-            if (android.os.Build.VERSION.SDK_INT >= 31) {
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Telefonun renklerini kullan")
-                        Text(
-                            "Uygulama renklerini telefonunun duvar kağıdına göre otomatik ayarlar (Material You). Açıkken vurgu rengi seçilemez.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    FlatSwitch(checked = s.dynamic, onCheckedChange = { s.setDynamic(it) })
-                }
-            }
-
-            if (!s.dynamic || android.os.Build.VERSION.SDK_INT < 31) {
-                Text("Vurgu rengi", Modifier.padding(top = 12.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    accents.forEachIndexed { i, c ->
-                        Box(
-                            Modifier.size(40.dp).clip(CircleShape).background(c)
-                                .then(
-                                    if (s.accent == i) Modifier.border(BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface), CircleShape)
-                                    else Modifier
-                                )
-                                .clickable { s.setAccent(i) }
-                        )
-                    }
-                }
-            }
-
-            Text("Arka plan", Modifier.padding(top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SoftButton("Duvar kağıdı seç", { bgPicker.launch("image/*") }, icon = Icons.Default.Image)
-                if (s.bgPath != null) {
-                    SoftButton("Varsayılana dön", { s.clearBackground() })
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Arka planı bulanıklaştır", Modifier.weight(1f))
-                FlatSwitch(checked = s.bgBlur, onCheckedChange = { s.changeBgBlur(it) })
-            }
         }
     }
 }
@@ -172,8 +159,12 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val cur = sub) {
             null -> Column(Modifier.fillMaxSize().statusBarsPadding()) {
-                TopRow("Ayarlar", onClose)
-                Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 24.dp)) {
+                ScreenTopBar("Ayarlar", onClose)
+                Column(
+                    Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding()
+                        .padding(horizontal = 16.dp).padding(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     SettingsRow(Icons.Default.VerticalSplit, "Yan Panel", "Kenar paneli, FPS / sıcaklık göstergesi, uygulamalar") { sub = Sub.EDGE }
                     SettingsRow(Icons.Default.SystemUpdate, "Güncellemeler", "Sürüm ${Updater.current(LocalContext.current).name}") { sub = Sub.UPDATES }
                     SettingsRow(Icons.Default.Lock, "İzinler", if (s.hasUsage) "Kullanım erişimi verildi" else "Kullanım erişimi gerekli") { sub = Sub.PERMS }
@@ -183,7 +174,7 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                 }
             }
             else -> Column(Modifier.fillMaxSize().statusBarsPadding()) {
-                TopRow(cur.title) { sub = null }
+                ScreenTopBar(cur.title) { sub = null }
                 Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
                         .padding(bottom = 24.dp).navigationBarsPadding()
@@ -203,25 +194,18 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
 }
 
 @Composable
-private fun TopRow(title: String, onBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(4.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri") }
-        Text(title, style = MaterialTheme.typography.titleLarge)
-    }
-}
-
-@Composable
 private fun SettingsRow(icon: ImageVector, title: String, subtitle: String?, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().flatClick(onClick = onClick)
+            .clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainer).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier.size(42.dp).clip(CircleShape).background(cs.secondaryContainer),
+            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(cs.primaryContainer),
             contentAlignment = Alignment.Center
-        ) { Icon(icon, null, tint = cs.onSecondaryContainer) }
-        Spacer(Modifier.width(16.dp))
+        ) { Icon(icon, null, tint = cs.onPrimaryContainer) }
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             if (subtitle != null) {
@@ -237,30 +221,28 @@ private fun SettingsRow(icon: ImageVector, title: String, subtitle: String?, onC
 @Composable
 private fun EdgePage(s: AppState) {
     val ctx = LocalContext.current
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("Kenar panelini aç")
-            Text(
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        FlatCard {
+            ToggleRow(
+                "Kenar panelini aç",
                 "Oyundayken ekranın kenarında küçük bir çizgi çıkar. Dokununca ya da içeri kaydırınca seçtiğin uygulamaların kısayolları açılır; " +
                     "kısayola dokunmak uygulamayı açılır pencerede (cihaz destekliyorsa) başlatır, uzun basmak normal açar. " +
                     "\"Diğer uygulamaların üzerinde göster\" ve kullanım erişimi izni gerekir; izni verip geri dönünce anahtarı tekrar aç.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                s.edge,
+                { on ->
+                    if (!on) {
+                        s.changeEdge(false)
+                    } else if (!Settings.canDrawOverlays(ctx)) {
+                        ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName)))
+                    } else {
+                        s.changeEdge(true)
+                    }
+                }
             )
         }
-        Spacer(Modifier.width(12.dp))
-        FlatSwitch(checked = s.edge, onCheckedChange = { on ->
-            if (!on) {
-                s.changeEdge(false)
-            } else if (!Settings.canDrawOverlays(ctx)) {
-                ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName)))
-            } else {
-                s.changeEdge(true)
-            }
-        })
+        FlatCard { EdgePanelSettings() }
+        HudSection(s)
     }
-    EdgePanelSettings()
-    HudSection(s)
 }
 
 // ====================================================================== Oyun içi bilgi (Yan Panel sayfasının içinde)
@@ -282,103 +264,97 @@ private fun HudSection(s: AppState) {
         set(on); save(on); s.applyEdge()
     }
 
-    Text("Oyun içi bilgi", Modifier.padding(top = 28.dp), style = MaterialTheme.typography.titleMedium)
-    Text(
-        "Oyundayken ekranda yazı olarak gösterilir; arka planı yoktur ve dokunmayı engellemez. Her biri ayrı açılıp kapanır. Yan paneli açınca da buradan aç/kapatabilirsin.",
-        Modifier.padding(top = 4.dp),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    HudSwitch("FPS", "Ekranda \"FPS: 60\" gibi görünür", fps) { toggle(it, { v -> fps = v }) { v -> EdgePrefs.setHudFps(ctx, v) } }
-    HudSwitch("Pil sıcaklığı", "Fps satırının altına eklenir", bat) { toggle(it, { v -> bat = v }) { v -> EdgePrefs.setHudBat(ctx, v) } }
-    HudSwitch("CPU sıcaklığı", "Pil sıcaklığının altına eklenir. Bazı telefonlarda Android okumaya izin vermez, \"--\" görünür.", cpu) {
-        toggle(it, { v -> cpu = v }) { v -> EdgePrefs.setHudCpu(ctx, v) }
-    }
-
-    Text("Konum", Modifier.padding(top = 16.dp, bottom = 6.dp), style = MaterialTheme.typography.bodyMedium)
-    SegmentedChoice(listOf("Üst sol", "Üst orta", "Üst sağ"), pos) { pos = it; EdgePrefs.setHudPos(ctx, it) }
-}
-
-@Composable
-private fun HudSwitch(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title)
-            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.width(12.dp))
-        FlatSwitch(checked = checked, onCheckedChange = onChange)
+    FlatCard {
+        Text("Oyun içi bilgi", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Oyundayken ekranda yazı olarak gösterilir; arka planı yoktur ve dokunmayı engellemez. Her biri ayrı açılıp kapanır. Yan paneli açınca da buradan aç/kapatabilirsin.",
+            Modifier.padding(top = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        ToggleRow(
+            "FPS", "Ekranda \"FPS: 60\" gibi görünür", fps,
+            { toggle(it, { v -> fps = v }) { v -> EdgePrefs.setHudFps(ctx, v) } },
+            Modifier.padding(top = 16.dp)
+        )
+        ToggleRow(
+            "Pil sıcaklığı", "Fps satırının altına eklenir", bat,
+            { toggle(it, { v -> bat = v }) { v -> EdgePrefs.setHudBat(ctx, v) } },
+            Modifier.padding(top = 16.dp)
+        )
+        ToggleRow(
+            "CPU sıcaklığı", "Pil sıcaklığının altına eklenir. Bazı telefonlarda Android okumaya izin vermez, \"--\" görünür.", cpu,
+            { toggle(it, { v -> cpu = v }) { v -> EdgePrefs.setHudCpu(ctx, v) } },
+            Modifier.padding(top = 16.dp)
+        )
+        Text("Konum", Modifier.padding(top = 18.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
+        SegmentedChoice(listOf("Üst sol", "Üst orta", "Üst sağ"), pos) { pos = it; EdgePrefs.setHudPos(ctx, it) }
     }
 }
 
 // ====================================================================== İzinler
 
 @Composable
+private fun PermissionCard(
+    title: String, desc: String, ok: Boolean?, okText: String, noText: String,
+    button: String, onClick: () -> Unit
+) {
+    FlatCard(Modifier.padding(bottom = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            if (ok != null) {
+                Spacer(Modifier.width(8.dp))
+                StatusChip(ok, okText, noText)
+            }
+        }
+        Text(
+            desc, Modifier.padding(top = 8.dp, bottom = 14.dp),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        SoftButton(button, onClick, Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
 private fun PermissionsPage(s: AppState) {
     val ctx = LocalContext.current
     Text(
         "Süre takibi, yan panel ve oyun içi bilgi için gereken izinler burada.",
-        Modifier.padding(top = 8.dp),
+        Modifier.padding(start = 4.dp, bottom = 16.dp),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
-    Text("Kullanım erişimi (süre takibi)", Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleSmall)
-    Text(
+    PermissionCard(
+        "Kullanım erişimi",
         "Oynama sürelerini ölçmek için gerekir. Yan panel ve oyun içi bilgi de oyunun açık olduğunu bu izinle anlar.",
-        Modifier.padding(top = 4.dp),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Text(
-        if (s.hasUsage) "Verildi ✓" else "Verilmedi — süreler ölçülemez.",
-        Modifier.padding(top = 8.dp)
-    )
-    SoftButton(
-        "Kullanım erişimi ayarlarını aç",
-        { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
-        Modifier.padding(top = 8.dp)
-    )
+        s.hasUsage, "Verildi", "Verilmedi",
+        "Kullanım erişimi ayarlarını aç"
+    ) { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
 
-    Text("Diğer uygulamaların üzerinde göster", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleSmall)
-    Text(
+    PermissionCard(
+        "Diğer uygulamaların üzerinde göster",
         "Yan panel çizgisi ve oyun içi FPS / sıcaklık yazıları için gerekir.",
-        Modifier.padding(top = 4.dp),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Text(
-        if (Settings.canDrawOverlays(ctx)) "Verildi ✓" else "Verilmedi — yan panel ve oyun içi bilgi çalışmaz.",
-        Modifier.padding(top = 8.dp)
-    )
-    SoftButton(
-        "Üstte gösterme ayarlarını aç",
-        { ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName))) },
-        Modifier.padding(top = 8.dp)
-    )
+        Settings.canDrawOverlays(ctx), "Verildi", "Verilmedi",
+        "Üstte gösterme ayarlarını aç"
+    ) { ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName))) }
 
-    Text("Üstteki bildirim", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleSmall)
-    Text(
+    PermissionCard(
+        "Üstteki bildirim",
         "Android, arka planda çalışan yan panel ve oyun içi bilgi için bir bildirim gösterilmesini şart koşar. " +
             "Bildirimi kapatırsan özellikler yine çalışır. Açılan ekranda \"Arka plan hizmeti\"ni kapat.",
-        Modifier.padding(top = 4.dp),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    SoftButton(
-        "Bildirim ayarlarını aç",
-        {
-            val i = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
-                .putExtra(Settings.EXTRA_CHANNEL_ID, "edge_quiet")
-            runCatching { ctx.startActivity(i) }.onFailure {
-                runCatching {
-                    ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
-                }
+        null, "", "",
+        "Bildirim ayarlarını aç"
+    ) {
+        val i = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+            .putExtra(Settings.EXTRA_CHANNEL_ID, "edge_quiet")
+        runCatching { ctx.startActivity(i) }.onFailure {
+            runCatching {
+                ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName))
             }
-        },
-        Modifier.padding(top = 8.dp)
-    )
+        }
+    }
 }
 
 // ====================================================================== Güncellemeler
@@ -515,8 +491,8 @@ private fun UpdatesPage() {
         val a = st as? UpState.Available
         if (a != null && a.r.notes.isNotBlank()) {
             Column(
-                Modifier.padding(top = 20.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                    .background(cs.surfaceVariant.copy(alpha = 0.5f)).padding(14.dp)
+                Modifier.padding(top = 20.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                    .background(cs.surfaceContainer).padding(16.dp)
             ) {
                 Text("Yenilikler", style = MaterialTheme.typography.titleSmall)
                 Text(a.r.notes.trim().take(600), Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall)
@@ -569,8 +545,8 @@ private fun HelpPage() {
     faq.forEach { (q, a) ->
         var open by remember { mutableStateOf(false) }
         Column(
-            Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(14.dp))
-                .background(cs.surfaceVariant.copy(alpha = 0.4f))
+            Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(20.dp))
+                .background(cs.surfaceContainer)
                 .clickable { open = !open }
                 .animateContentSize()
                 .padding(14.dp)
