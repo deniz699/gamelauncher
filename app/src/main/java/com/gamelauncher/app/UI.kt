@@ -248,7 +248,7 @@ fun GameGrid(
     onOpen: (String) -> Unit
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+        columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 168.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -276,31 +276,46 @@ private fun GameTile(s: AppState, g: Game, onOpen: (String) -> Unit) {
     val total = remember(s.sessions, g.pkg) { playedMs(s.sessions, g.pkg, Range.ALL) }
     Column(
         Modifier.flatClick(onLongClick = { onOpen(g.pkg) }) { s.launch(g.pkg) }
-            .clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainer).padding(6.dp)
+            .clip(RoundedCornerShape(26.dp)).background(cs.surfaceContainer).padding(8.dp)
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(16.dp))) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp))) {
             Cover(g, Modifier.fillMaxSize())
             Box(
-                Modifier.align(Alignment.TopEnd).padding(6.dp).size(28.dp).clip(CircleShape)
+                Modifier.align(Alignment.TopEnd).padding(8.dp).size(34.dp).clip(CircleShape)
                     .background(if (g.favorite) cs.primary else cs.background)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { s.toggleFav(g.pkg) },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     if (g.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    "Favori", Modifier.size(15.dp),
+                    "Favori", Modifier.size(18.dp),
                     tint = if (g.favorite) cs.onPrimary else cs.onSurface
                 )
             }
         }
         Text(
-            g.name, Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(top = 8.dp),
-            maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 13.sp
+            g.name, Modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(top = 12.dp),
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            fontWeight = FontWeight.Bold, fontSize = 17.sp, letterSpacing = (-0.2).sp,
+            color = cs.onSurface
         )
-        Text(
-            fmtDur(total), Modifier.padding(horizontal = 4.dp).padding(bottom = 4.dp),
-            maxLines = 1, fontSize = 11.sp, color = cs.onSurfaceVariant
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(start = 6.dp, top = 8.dp, bottom = 4.dp, end = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.clip(RoundedCornerShape(50)).background(cs.surfaceContainerHighest)
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text(fmtDur(total), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurfaceVariant, maxLines = 1)
+            }
+            Spacer(Modifier.weight(1f))
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(cs.primary)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { s.launch(g.pkg) },
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.PlayArrow, "Oyna", Modifier.size(22.dp), tint = cs.onPrimary) }
+        }
     }
 }
 

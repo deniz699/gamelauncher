@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -12,6 +13,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -114,5 +116,8 @@ fun LauncherTheme(mode: Int, accent: Int, dynamic: Boolean, content: @Composable
     } else {
         flatScheme(accents[accent.coerceIn(accents.indices)], dark, mode == 3)
     }
-    MaterialTheme(colorScheme = scheme, typography = AppTypography, shapes = AppShapes, content = content)
+    MaterialTheme(colorScheme = scheme, typography = AppTypography, shapes = AppShapes) {
+        // Surface/Scaffold dışındaki yazı ve ikonlar da temaya göre açık/koyu olsun
+        CompositionLocalProvider(LocalContentColor provides scheme.onBackground, content = content)
+    }
 }
