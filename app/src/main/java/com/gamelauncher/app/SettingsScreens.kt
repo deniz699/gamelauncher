@@ -389,7 +389,10 @@ private sealed interface UpState {
     object Checking : UpState
     object UpToDate : UpState
     class Available(val r: Updater.Release) : UpState
-    class Downloading(val r: Updater.Release, val p: Float) : UpState
+    class Downloading(val r: Updater.Release, val done: Long, val total: Long) : UpState {
+        val p: Float get() = if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else 0f
+    }
+    class Ready(val r: Updater.Release, val file: File) : UpState
     class NeedsPermission(val r: Updater.Release, val file: File) : UpState
     class Failed(val msg: String) : UpState
 }
@@ -433,6 +436,20 @@ private fun UpdatesPage() {
     val cur = remember { Updater.current(ctx) }
     var st by remember { mutableStateOf<UpState>(UpState.Idle) }
 
+    fun download(r: Updater.Release) {
+        val url = r.apkUrl ?: run { st = UpState.Failed("Bu sürümde indirilebilir APK bulunamadı."); return }
+        scope.launch {
+            st = UpState.Downloading(r, 0L, 0L)
+            val res = withContext(Dispatchers.IO) {
+                runCatching { Updater.download(ctx, url) { d, t -> st = UpState.Downloading(r, d, t) } }
+            }
+            res.fold(
+                onSuccess = { f -> st = if (Updater.install(ctx, f)) UpState.Ready(r, f) else UpState.NeedsPermission(r, f) },
+                onFailure = { st = UpState.Failed("İndirme başarısız oldu. Bağlantını kontrol edip tekrar dene.") }
+            )
+        }
+    }
+
     fun check() {
         st = UpState.Checking
         scope.launch {
@@ -447,29 +464,11 @@ private fun UpdatesPage() {
         }
     }
 
-    fun download(r: Updater.Release) {
-        val url = r.apkUrl ?: run { st = UpState.Failed("Bu sürümde indirilebilir APK bulunamadı."); return }
-        scope.launch {
-            st = UpState.Downloading(r, 0f)
-            val res = withContext(Dispatchers.IO) {
-                runCatching { Updater.download(ctx, url) { p -> st = UpState.Downloading(r, p) } }
-            }
-            res.fold(
-                onSuccess = { f -> st = if (Updater.install(ctx, f)) UpState.Available(r) else UpState.NeedsPermission(r, f) },
-                onFailure = { st = UpState.Failed("İndirme başarısız oldu. Bağlantını kontrol edip tekrar dene.") }
-            )
-        }
-    }
-
     Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(104.dp), contentAlignment = Alignment.Center) {
             when (val x = st) {
-                is UpState.Checking, is UpState.Downloading ->
-                    if (x is UpState.Downloading) {
-                        CircularProgressIndicator(progress = { x.p }, modifier = Modifier.size(88.dp), strokeWidth = 6.dp)
-                    } else {
-                        CircularProgressIndicator(modifier = Modifier.size(88.dp), strokeWidth = 6.dp)
-                    }
+                is UpState.Checking -> CircularProgressIndicator(modifier = Modifier.size(88.dp), strokeWidth = 6.dp)
+                is UpState.Downloading -> Icon(Icons.Default.SystemUpdate, null, Modifier.size(64.dp), tint = cs.primary)
                 is UpState.UpToDate -> AnimatedCheck(104.dp, cs.primary)
                 is UpState.Failed -> Icon(Icons.Default.CloudOff, null, Modifier.size(64.dp), tint = cs.error)
                 else -> Icon(Icons.Default.SystemUpdate, null, Modifier.size(64.dp), tint = cs.primary)
@@ -479,18 +478,20 @@ private fun UpdatesPage() {
         val title = when (val x = st) {
             is UpState.Idle -> "Sürüm ${cur.name}"
             is UpState.Checking -> "Güncellemeler kontrol ediliyor…"
-            is UpState.UpToDate -> "Uygulaman güncel"
+            is UpState.UpToDate -> "Uygulamanız güncel"
             is UpState.Available -> "Yeni sürüm var: 1.0.${x.r.build}"
-            is UpState.Downloading -> "İndiriliyor… %${(x.p * 100).toInt()}"
+            is UpState.Downloading -> "Güncelleme indiriliyor…"
+            is UpState.Ready -> "İndirme tamamlandı"
             is UpState.NeedsPermission -> "Kurulum izni gerekli"
             is UpState.Failed -> "Kontrol edilemedi"
         }
         Text(title, Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
 
         val sub = when (val x = st) {
-            is UpState.Idle -> "Güncellemeleri GitHub'daki son sürümden kontrol eder."
+            is UpState.Idle -> "Güncellemeleri kontrol etmek için aşağıdaki düğmeye dokun."
             is UpState.UpToDate -> "Kurulu sürüm: ${cur.name}"
             is UpState.Available -> "Kurulu sürüm: ${cur.name}"
+            is UpState.Ready -> "Kurulum ekranında \"Yükle\"ye dokun. Kurulum bitince uygulama yeniden açılır."
             is UpState.NeedsPermission -> "Açılan ekranda bu uygulamaya \"bu kaynaktan yüklemeye izin ver\" de, geri dönüp tekrar dokun."
             is UpState.Failed -> x.msg
             else -> null
@@ -502,14 +503,36 @@ private fun UpdatesPage() {
             )
         }
 
+        val d = st as? UpState.Downloading
+        if (d != null) {
+            Spacer(Modifier.height(20.dp))
+            LinearProgressIndicator(
+                progress = { d.p },
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+            )
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    if (d.total > 0) "%${(d.p * 100).toInt()}" else "…",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+                )
+                Text(
+                    if (d.total > 0) "%.1f / %.1f MB".format(d.done / 1048576f, d.total / 1048576f)
+                    else "%.1f MB".format(d.done / 1048576f),
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+                )
+            }
+        }
+
         Spacer(Modifier.height(24.dp))
         when (val x = st) {
             is UpState.Idle, is UpState.UpToDate, is UpState.Failed ->
                 PlayButton({ check() }, Modifier.fillMaxWidth(), label = "Güncellemeyi kontrol et")
             is UpState.Available ->
                 PlayButton({ download(x.r) }, Modifier.fillMaxWidth(), label = "İndir ve güncelle")
+            is UpState.Ready ->
+                PlayButton({ Updater.install(ctx, x.file) }, Modifier.fillMaxWidth(), label = "Şimdi kur")
             is UpState.NeedsPermission ->
-                PlayButton({ if (Updater.install(ctx, x.file)) st = UpState.Available(x.r) }, Modifier.fillMaxWidth(), label = "Tekrar dene")
+                PlayButton({ if (Updater.install(ctx, x.file)) st = UpState.Ready(x.r, x.file) }, Modifier.fillMaxWidth(), label = "Tekrar dene")
             else -> {}
         }
 
@@ -525,9 +548,9 @@ private fun UpdatesPage() {
         }
 
         Text(
-            "Nasıl güncellenir? Yeni sürüm varsa APK uygulamanın içinden indirilir ve Android'in kurma ekranı açılır; " +
+            "Yeni sürüm varsa \"İndir ve güncelle\"ye dokun; APK indirilir ve Android'in kurma ekranı açılır. " +
                 "\"Yükle\"ye dokunman yeterli. Ayarların, oyun listen ve widget'ların korunur. " +
-                "Güncellemeler kendiliğinden kurulmaz; her zaman senin onayınla yapılır.",
+                "Android güvenlik gereği kurulumu her zaman senin onayınla yapar.",
             Modifier.padding(top = 24.dp),
             style = MaterialTheme.typography.bodySmall,
             color = cs.onSurfaceVariant

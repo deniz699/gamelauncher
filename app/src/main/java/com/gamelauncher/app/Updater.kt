@@ -14,7 +14,8 @@ import java.net.URL
 
 /**
  * Güncelleme akışı:
- *  1) GitHub Actions her derlemede "v1.0.<numara>" etiketli bir sürüm yayınlar ve APK'yı ekler (build.yml).
+ *  1) GitHub Actions her derlemede, kaynak koddan ayrı olan herkese açık "releases" deposunda
+ *     "v1.0.<numara>" etiketli bir sürüm yayınlar ve yalnızca APK'yı ekler (build.yml).
  *  2) Uygulama GitHub'daki en son sürümü sorar, numarasını kendi sürüm numarasıyla karşılaştırır.
  *  3) Yeni sürüm varsa APK'yı indirir ve Android'in kurma ekranını açar (kullanıcı onaylar).
  */
@@ -76,8 +77,8 @@ object Updater {
         else -> "Güncelleme kontrol edilemedi."
     }
 
-    /** Ağ işlemi: arka plan iş parçacığında çağır. İlerleme 0..1. */
-    fun download(ctx: Context, url: String, onProgress: (Float) -> Unit): File {
+    /** Ağ işlemi: arka plan iş parçacığında çağır. İlerleme: (inen bayt, toplam bayt); toplam bilinmiyorsa 0. */
+    fun download(ctx: Context, url: String, onProgress: (Long, Long) -> Unit): File {
         val dir = File(ctx.cacheDir, "updates").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         val out = File(dir, "GameLauncher.apk")
         val c = URL(url).openConnection() as HttpURLConnection
@@ -97,10 +98,8 @@ object Updater {
                         if (n < 0) break
                         o.write(buf, 0, n)
                         done += n
-                        if (total > 0) {
-                            val pct = (done * 100 / total).toInt()
-                            if (pct != last) { last = pct; onProgress(pct / 100f) }
-                        }
+                        val pct = if (total > 0) (done * 100 / total).toInt() else (done / (256 * 1024)).toInt()
+                        if (pct != last) { last = pct; onProgress(done, maxOf(total, 0L)) }
                     }
                 }
             }
