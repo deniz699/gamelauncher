@@ -1,8 +1,12 @@
-name: APK derle
+name: APK derle ve yayınla
 
 on:
   push:
   workflow_dispatch:
+
+env:
+  # Yalnızca APK'ların durduğu herkese açık depo: kullanici/gamelauncher-releases
+  RELEASES_REPO: ${{ github.repository_owner }}/gamelauncher-releases
 
 jobs:
   build:
@@ -22,7 +26,20 @@ jobs:
       - name: APK derle
         run: gradle assembleDebug --no-daemon
 
+      - name: APK'yı hazırla
+        run: cp app/build/outputs/apk/debug/app-debug.apk GameLauncher.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: GameLauncher-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: GameLauncher.apk
+
+      - name: Herkese açık depoda sürüm yayınla (yalnızca APK)
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          gh release create "v1.0.${GITHUB_RUN_NUMBER}" GameLauncher.apk \
+            --repo "$RELEASES_REPO" \
+            --title "Sürüm 1.0.${GITHUB_RUN_NUMBER}" \
+            --notes "Game Launcher 1.0.${GITHUB_RUN_NUMBER}" \
+            --latest
