@@ -17,8 +17,9 @@ android {
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = run
         versionName = "1.0.$run"
-        // "kullanici/depo" — Actions'ta otomatik dolar, yerelde boş kalır
-        buildConfigField("String", "GITHUB_REPO", "\"${System.getenv("GITHUB_REPOSITORY") ?: ""}\"")
+        // Güncellemelerin aranacağı herkese açık, yalnızca APK içeren depo ("kullanici/gamelauncher-releases").
+        // Actions'ta RELEASES_REPO olarak otomatik dolar, yerelde boş kalır.
+        buildConfigField("String", "GITHUB_REPO", "\"${System.getenv("RELEASES_REPO") ?: ""}\"")
     }
 
     signingConfigs {
