@@ -614,7 +614,8 @@ private fun HelpPage() {
 
 @Composable
 private fun AboutPage() {
-    val cur = remember { Updater.current(LocalContext.current) }
+    val context = LocalContext.current
+    val cur = remember { Updater.current(context) }
     val cs = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Game Launcher", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
