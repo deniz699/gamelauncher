@@ -74,6 +74,9 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
             SectionLabel("Tema")
             SegmentedChoice(listOf("Sistem", "Açık", "Koyu", "AMOLED"), s.themeMode) { s.setTheme(it) }
 
+            SectionLabel("Yazı boyutu")
+            SegmentedChoice(listOf("Küçük", "Normal", "Büyük"), s.fontStep) { s.changeFontStep(it) }
+
             if (android.os.Build.VERSION.SDK_INT >= 31) {
                 FlatCard(Modifier.padding(top = 16.dp), pad = 16.dp) {
                     ToggleRow(

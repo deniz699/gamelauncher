@@ -57,6 +57,51 @@ class AppState(private val ctx: Context) {
 
     @JvmName("applyIconDark") fun setIconDark(v: Boolean) { iconDark = v; prefs.edit().putBoolean("icon_dark", v).apply() }
 
+    // ---------- Görünüm: liste/ızgara, yazı boyutu; gruplar ----------
+    var listView by mutableStateOf(prefs.getBoolean("listview", false))
+    var fontStep by mutableIntStateOf(prefs.getInt("fontstep", 1)) // 0 küçük, 1 normal, 2 büyük
+    var groups by mutableStateOf(loadGroups())
+    var groupOf by mutableStateOf(loadGroupMap())
+
+    fun changeListView(v: Boolean) { listView = v; prefs.edit().putBoolean("listview", v).apply() }
+    fun changeFontStep(v: Int) { fontStep = v; prefs.edit().putInt("fontstep", v).apply() }
+
+    private fun loadGroups(): List<String> =
+        (prefs.getString("groups", "") ?: "").split("\n").filter { it.isNotBlank() }
+
+    private fun loadGroupMap(): Map<String, String> =
+        (prefs.getString("gmap", "") ?: "").split("\n").mapNotNull { l ->
+            val i = l.indexOf('\t')
+            if (i > 0) l.substring(0, i) to l.substring(i + 1) else null
+        }.toMap()
+
+    private fun saveGroups() {
+        prefs.edit()
+            .putString("groups", groups.joinToString("\n"))
+            .putString("gmap", groupOf.entries.joinToString("\n") { it.key + "\t" + it.value })
+            .apply()
+    }
+
+    /** Grup ekler; eklenen (düzeltilmiş) adı döner, zaten varsa ya da boşsa null. */
+    fun addGroup(name: String): String? {
+        val n = name.trim().replace("\n", " ").replace("\t", " ")
+        if (n.isBlank() || n in groups) return null
+        groups = groups + n
+        saveGroups()
+        return n
+    }
+
+    fun removeGroup(name: String) {
+        groups = groups.filter { it != name }
+        groupOf = groupOf.filterValues { it != name }
+        saveGroups()
+    }
+
+    fun setGroup(pkg: String, name: String?) {
+        groupOf = if (name == null) groupOf - pkg else groupOf + (pkg to name)
+        saveGroups()
+    }
+
     fun setTheme(v: Int) { themeMode = v; prefs.edit().putInt("theme", v).apply() }
     @JvmName("applyAccent") fun setAccent(v: Int) { accent = v; prefs.edit().putInt("accent", v).apply() }
     @JvmName("applyDynamic") fun setDynamic(v: Boolean) { dynamic = v; prefs.edit().putBoolean("dynamic", v).apply() }

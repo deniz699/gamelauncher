@@ -1,6 +1,21 @@
 package com.gamelauncher.app
 
 import android.content.Intent
+import android.content.Context
+import android.graphics.Bitmap
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.ui.graphics.lerp
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.delay
+import java.io.File
+import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Date
+import java.util.Locale
 import android.graphics.BitmapFactory
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
@@ -68,6 +83,11 @@ fun App(s: AppState) {
     var showDevice by remember { mutableStateOf(false) }
     var statsGame by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<String?>(null) }
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var group by remember { mutableStateOf<String?>(null) }
+    var showNewGroup by remember { mutableStateOf(false) }
+    var delGroup by remember { mutableStateOf<String?>(null) }
     val cs = MaterialTheme.colorScheme
 
     // Durum/gezinme çubuğu ikonları temaya göre açık ya da koyu olsun
@@ -82,8 +102,9 @@ fun App(s: AppState) {
         }
     }
 
-    // Geri: Favoriler/İstatistik'ten ana sayfaya döner, ana sayfadayken uygulamadan çıkar
+    // Geri: aramayı kapatır; Favoriler/İstatistik'ten ana sayfaya döner; ana sayfadayken uygulamadan çıkar
     BackHandler(enabled = tab != 0) { tab = 0 }
+    BackHandler(enabled = searching) { searching = false; query = "" }
     // Sağa/sola kaydırarak sayfa değiştirme (alt çubukla senkron)
     val pagerState = rememberPagerState { 3 }
     LaunchedEffect(tab) {
@@ -99,17 +120,40 @@ fun App(s: AppState) {
         "İstatistik" to Icons.Default.BarChart
     )
 
+    val activeGroup = group?.takeIf { it in s.groups }
+    val filtering = query.isNotBlank() || activeGroup != null
+    fun visible(list: List<Game>): List<Game> = list.filter { g ->
+        (activeGroup == null || s.groupOf[g.pkg] == activeGroup) &&
+            g.name.contains(query.trim(), ignoreCase = true)
+    }
+
     Box(Modifier.fillMaxSize().background(cs.background)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            HomeHeader(s, tab, onAppearance = { showAppearance = true }, onSettings = { showSettings = true })
+            HomeHeader(
+                s, tab, searching,
+                onSearch = { searching = !searching; if (!searching) query = "" },
+                onAppearance = { showAppearance = true },
+                onSettings = { showSettings = true }
+            )
+            if (searching && tab != 2) {
+                FlatSearchField(query, { query = it }, "Oyun ara", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
+            if (tab != 2) {
+                FilterRow(s, activeGroup, { group = it }, { showNewGroup = true }, { delGroup = it })
+            }
             if (!s.hasUsage) UsageBanner()
             HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
                 when (page) {
                     0 -> GameGrid(
-                        s, s.sortedGames(), "Oyun bulunamadı. Telefondaki oyunlar otomatik eklenir.",
-                        header = { HomeSummary(s, onStats = { tab = 2 }, onDevice = { showDevice = true }) }
+                        s, visible(s.sortedGames()),
+                        if (filtering) "Eşleşen oyun yok." else "Oyun bulunamadı. Telefondaki oyunlar otomatik eklenir.",
+                        header = { HomeExtras(s, onStats = { tab = 2 }, onDevice = { showDevice = true }) },
+                        showHeader = !filtering
                     ) { selected = it }
-                    1 -> GameGrid(s, s.sortedGames().filter { it.favorite }, "Favori oyun yok. Kalbe dokunarak ekle.") { selected = it }
+                    1 -> GameGrid(
+                        s, visible(s.sortedGames().filter { it.favorite }),
+                        if (filtering) "Eşleşen oyun yok." else "Favori oyun yok. Kalbe dokunarak ekle."
+                    ) { selected = it }
                     else -> StatsTab(s) { statsGame = it }
                 }
             }
@@ -140,11 +184,34 @@ fun App(s: AppState) {
     if (showAdd) AddSheet(s) { showAdd = false }
     if (showAppearance) AppearanceSheet(s) { showAppearance = false }
     selected?.let { DetailSheet(s, it) { selected = null } }
+
+    if (showNewGroup) {
+        NewGroupDialog(
+            onAdd = { name -> s.addGroup(name)?.let { group = it } },
+            onClose = { showNewGroup = false }
+        )
+    }
+    delGroup?.let { n ->
+        AlertDialog(
+            onDismissRequest = { delGroup = null },
+            containerColor = cs.surfaceContainerHigh,
+            title = { Text("Grup silinsin mi?") },
+            text = { Text("\"$n\" grubu silinir. Oyunlar silinmez, sadece gruptan çıkar.") },
+            confirmButton = {
+                TextButton(onClick = { s.removeGroup(n); if (group == n) group = null; delGroup = null }) {
+                    Text("Sil", color = cs.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { delGroup = null }) { Text("Vazgeç") } }
+        )
+    }
 }
 
 @Composable
-private fun HomeHeader(s: AppState, tab: Int, onAppearance: () -> Unit, onSettings: () -> Unit) {
-    var sortMenu by remember { mutableStateOf(false) }
+private fun HomeHeader(
+    s: AppState, tab: Int, searching: Boolean,
+    onSearch: () -> Unit, onAppearance: () -> Unit, onSettings: () -> Unit
+) {
     val cs = MaterialTheme.colorScheme
     val title = when (tab) { 0 -> "Oyunlarım"; 1 -> "Favoriler"; else -> "İstatistik" }
     val sub = when (tab) {
@@ -162,23 +229,100 @@ private fun HomeHeader(s: AppState, tab: Int, onAppearance: () -> Unit, onSettin
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (tab != 2) {
-                Box {
-                    IconBox(Icons.AutoMirrored.Filled.Sort, "Sırala", { sortMenu = true })
-                    DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                        SortMode.entries.forEach { m ->
-                            DropdownMenuItem(
-                                text = { Text(m.label) },
-                                leadingIcon = { if (s.sort == m) Icon(Icons.Default.Check, null) },
-                                onClick = { s.setSort(m); sortMenu = false }
-                            )
-                        }
-                    }
-                }
+                IconBox(
+                    if (searching) Icons.Default.Close else Icons.Default.Search,
+                    if (searching) "Aramayı kapat" else "Ara", onSearch,
+                    container = if (searching) cs.primaryContainer else cs.surfaceContainerHigh,
+                    tint = if (searching) cs.onPrimaryContainer else cs.onSurface
+                )
             }
             IconBox(Icons.Default.Palette, "Görünüm", onAppearance)
             IconBox(Icons.Default.Settings, "Ayarlar", onSettings)
         }
     }
+}
+
+@Composable
+private fun FlatChip(label: String, selected: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val bg by animateColorAsState(if (selected) cs.primary else cs.surfaceContainerHigh, tween(180), label = "chipBg")
+    val fg by animateColorAsState(if (selected) cs.onPrimary else cs.onSurface, tween(180), label = "chipFg")
+    Box(
+        Modifier.flatClick(onLongClick = onLongClick, onClick = onClick)
+            .clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 16.dp, vertical = 9.dp)
+    ) {
+        Text(label, color = fg, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1)
+    }
+}
+
+/** Gruplar (uzun basınca silinir) + liste/ızgara geçişi + sıralama. */
+@Composable
+private fun FilterRow(
+    s: AppState, active: String?, onSelect: (String?) -> Unit, onNew: () -> Unit, onDelete: (String) -> Unit
+) {
+    var sortMenu by remember { mutableStateOf(false) }
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { FlatChip("Tümü", active == null) { onSelect(null) } }
+            items(s.groups, key = { it }) { n ->
+                FlatChip(n, active == n, onLongClick = { onDelete(n) }) { onSelect(n) }
+            }
+            item { FlatChip("+ Grup", false) { onNew() } }
+        }
+        Spacer(Modifier.width(8.dp))
+        IconBox(
+            if (s.listView) Icons.Default.GridView else Icons.Default.ViewAgenda,
+            if (s.listView) "Izgara görünümü" else "Liste görünümü",
+            { s.changeListView(!s.listView) },
+            size = 40.dp, radius = 12.dp
+        )
+        Spacer(Modifier.width(8.dp))
+        Box {
+            IconBox(Icons.AutoMirrored.Filled.Sort, "Sırala", { sortMenu = true }, size = 40.dp, radius = 12.dp)
+            DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                SortMode.entries.forEach { m ->
+                    DropdownMenuItem(
+                        text = { Text(m.label) },
+                        leadingIcon = { if (s.sort == m) Icon(Icons.Default.Check, null) },
+                        onClick = { s.setSort(m); sortMenu = false }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewGroupDialog(onAdd: (String) -> Unit, onClose: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = cs.surfaceContainerHigh,
+        title = { Text("Yeni grup") },
+        text = {
+            TextField(
+                value = name, onValueChange = { name = it }, singleLine = true,
+                placeholder = { Text("Örn. Battle Royale") },
+                shape = RoundedCornerShape(16.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = cs.surfaceContainerHighest,
+                    unfocusedContainerColor = cs.surfaceContainerHighest,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank(), onClick = { onAdd(name); onClose() }) { Text("Oluştur") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Vazgeç") } }
+    )
 }
 
 @Composable
@@ -201,7 +345,16 @@ private fun UsageBanner() {
     }
 }
 
-/** Ana sayfanın üstü: bugünkü süre (iri) + iki hızlı eylem. */
+/** Ana sayfanın üstü: bugünkü süre + hızlı eylemler, kaldığın yer şeridi, haftalık özet. */
+@Composable
+private fun HomeExtras(s: AppState, onStats: () -> Unit, onDevice: () -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        HomeSummary(s, onStats, onDevice)
+        RecentStrip(s)
+        WeekCard(s)
+    }
+}
+
 @Composable
 private fun HomeSummary(s: AppState, onStats: () -> Unit, onDevice: () -> Unit) {
     val ctx = LocalContext.current
@@ -239,22 +392,123 @@ private fun ActionTile(icon: ImageVector, label: String, modifier: Modifier, onC
     }
 }
 
+private fun agoText(ms: Long): String {
+    val m = (System.currentTimeMillis() - ms) / 60_000
+    return when {
+        m < 1 -> "Az önce"
+        m < 60 -> "$m dk önce"
+        m < 24 * 60 -> "${m / 60} sa önce"
+        else -> "${m / (24 * 60)} gün önce"
+    }
+}
+
+/** En son açılan 4 oyun: tek dokunuşla devam. */
+@Composable
+private fun RecentStrip(s: AppState) {
+    val cs = MaterialTheme.colorScheme
+    val recent = s.games.filter { it.lastPlayed > 0 }.sortedByDescending { it.lastPlayed }.take(4)
+    if (recent.isEmpty()) return
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            "Kaldığın yerden", Modifier.padding(start = 4.dp, top = 18.dp, bottom = 10.dp),
+            style = MaterialTheme.typography.titleMedium
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(recent, key = { it.pkg }) { g ->
+                Row(
+                    Modifier.flatClick { s.launch(g.pkg) }
+                        .clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainer).padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Cover(g, Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)), 0.85f)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.widthIn(max = 110.dp)) {
+                        Text(g.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(agoText(g.lastPlayed), fontSize = 12.sp, color = cs.onSurfaceVariant, maxLines = 1)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.size(34.dp).clip(CircleShape).background(cs.primary), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.PlayArrow, "Devam et", Modifier.size(20.dp), tint = cs.onPrimary)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
+            }
+        }
+    }
+}
+
+private fun weekBuckets(sessions: List<Session>): List<Pair<String, Long>> {
+    val z = ZoneId.systemDefault()
+    val today = LocalDate.now(z)
+    val f = DateTimeFormatter.ofPattern("EEE", Locale("tr"))
+    return (6 downTo 0).map { back ->
+        val d = today.minusDays(back.toLong())
+        val a0 = d.atStartOfDay(z).toInstant().toEpochMilli()
+        val b0 = d.plusDays(1).atStartOfDay(z).toInstant().toEpochMilli()
+        var sum = 0L
+        for (se in sessions) {
+            val a = maxOf(se.start, a0)
+            val b = minOf(se.end, b0)
+            if (b > a) sum += b - a
+        }
+        d.format(f) to sum
+    }
+}
+
+/** Son 7 günün günlük toplamları. Bugün vurgu renginde. */
+@Composable
+private fun WeekCard(s: AppState) {
+    val cs = MaterialTheme.colorScheme
+    val days = remember(s.sessions) { weekBuckets(s.sessions) }
+    val maxV = days.maxOf { it.second }.coerceAtLeast(60_000L)
+    FlatCard(Modifier.padding(top = 10.dp), pad = 16.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Son 7 gün", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            DurationText(days.sumOf { it.second }, cs.onSurface, 18.sp)
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 14.dp).height(84.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            days.forEachIndexed { i, (label, ms) ->
+                Column(
+                    Modifier.weight(1f).fillMaxHeight(),
+                    verticalArrangement = Arrangement.Bottom,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val h = (56f * ms.toFloat() / maxV).coerceAtLeast(5f)
+                    Box(
+                        Modifier.fillMaxWidth().height(h.dp).clip(RoundedCornerShape(8.dp))
+                            .background(if (i == days.lastIndex) cs.primary else cs.primaryContainer)
+                    )
+                    Text(
+                        label, Modifier.padding(top = 6.dp), fontSize = 11.sp, maxLines = 1,
+                        fontWeight = if (i == days.lastIndex) FontWeight.Bold else FontWeight.Normal,
+                        color = if (i == days.lastIndex) cs.onSurface else cs.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun GameGrid(
     s: AppState,
     list: List<Game>,
     emptyText: String,
     header: (@Composable () -> Unit)? = null,
+    showHeader: Boolean = true,
     onOpen: (String) -> Unit
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = GridCells.Fixed(if (s.listView) 1 else 2),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 168.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        if (header != null) {
+        if (header != null && showHeader) {
             item(span = { GridItemSpan(maxLineSpan) }) { header() }
         }
         if (list.isEmpty()) {
@@ -265,17 +519,30 @@ fun GameGrid(
                 )
             }
         }
-        items(list, key = { it.pkg }) { g -> GameTile(s, g, onOpen) }
+        itemsIndexed(list, key = { _, g -> g.pkg }) { i, g ->
+            if (s.listView) GameRow(s, g, i, onOpen) else GameTile(s, g, i, onOpen)
+        }
     }
+}
+
+/** İlk kartlar sırayla yukarı kayarak belirir (hafif, tek seferlik). */
+@Composable
+private fun Modifier.enterAnim(index: Int): Modifier {
+    if (index > 9) return this
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(index * 45L); shown = true }
+    val a by animateFloatAsState(if (shown) 1f else 0f, tween(320), label = "enA")
+    val y by animateFloatAsState(if (shown) 0f else 24f, tween(320), label = "enY")
+    return this.graphicsLayer { alpha = a; translationY = y * density }
 }
 
 /** Dokun = oyunu aç, uzun bas = detay. */
 @Composable
-private fun GameTile(s: AppState, g: Game, onOpen: (String) -> Unit) {
+private fun GameTile(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     val total = remember(s.sessions, g.pkg) { playedMs(s.sessions, g.pkg, Range.ALL) }
     Column(
-        Modifier.flatClick(onLongClick = { onOpen(g.pkg) }) { s.launch(g.pkg) }
+        Modifier.enterAnim(index).flatClick(onLongClick = { onOpen(g.pkg) }) { s.launch(g.pkg) }
             .clip(RoundedCornerShape(26.dp)).background(cs.surfaceContainer).padding(8.dp)
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp))) {
@@ -316,6 +583,48 @@ private fun GameTile(s: AppState, g: Game, onOpen: (String) -> Unit) {
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Default.PlayArrow, "Oyna", Modifier.size(22.dp), tint = cs.onPrimary) }
         }
+    }
+}
+
+/** Kompakt liste görünümü. */
+@Composable
+private fun GameRow(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val total = remember(s.sessions, g.pkg) { playedMs(s.sessions, g.pkg, Range.ALL) }
+    Row(
+        Modifier.enterAnim(index).fillMaxWidth().flatClick(onLongClick = { onOpen(g.pkg) }) { s.launch(g.pkg) }
+            .clip(RoundedCornerShape(24.dp)).background(cs.surfaceContainer).padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Cover(g, Modifier.size(64.dp).clip(RoundedCornerShape(18.dp)))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                g.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.Bold, fontSize = 17.sp, letterSpacing = (-0.2).sp
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(fmtDur(total), fontSize = 13.sp, color = cs.onSurfaceVariant, maxLines = 1)
+        }
+        Box(
+            Modifier.size(40.dp).clip(CircleShape)
+                .background(if (g.favorite) cs.primary else cs.surfaceContainerHighest)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { s.toggleFav(g.pkg) },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                if (g.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                "Favori", Modifier.size(20.dp),
+                tint = if (g.favorite) cs.onPrimary else cs.onSurface
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Box(
+            Modifier.size(40.dp).clip(CircleShape).background(cs.primary)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { s.launch(g.pkg) },
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Default.PlayArrow, "Oyna", Modifier.size(24.dp), tint = cs.onPrimary) }
+        Spacer(Modifier.width(2.dp))
     }
 }
 
@@ -399,9 +708,60 @@ fun AddSheet(s: AppState, onClose: () -> Unit) {
 
 // ---------------------------------------------------------------- Oyun detayı
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Kapak görselinin baskın canlı rengi (oyuna özel vurgu rengi için). */
+private fun coverColor(ctx: Context, g: Game): Color? = runCatching {
+    val path = g.cover ?: g.autoCover
+    val decoded: Bitmap? = if (path != null) {
+        BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = 8 })
+    } else {
+        ctx.packageManager.getApplicationIcon(g.pkg).toBitmap(48, 48)
+    }
+    val src = decoded ?: return@runCatching null
+    val bmp = Bitmap.createScaledBitmap(src, 24, 24, true)
+    val hsv = FloatArray(3)
+    var r = 0.0; var gr = 0.0; var b = 0.0; var wSum = 0.0
+    for (y in 0 until 24) for (x in 0 until 24) {
+        val px = bmp.getPixel(x, y)
+        android.graphics.Color.colorToHSV(px, hsv)
+        val w = (hsv[1] * hsv[2]).toDouble().let { it * it }
+        r += android.graphics.Color.red(px) * w
+        gr += android.graphics.Color.green(px) * w
+        b += android.graphics.Color.blue(px) * w
+        wSum += w
+    }
+    if (wSum < 0.5) return@runCatching null
+    val avg = android.graphics.Color.rgb((r / wSum).toInt(), (gr / wSum).toInt(), (b / wSum).toInt())
+    android.graphics.Color.colorToHSV(avg, hsv)
+    hsv[1] = maxOf(hsv[1], 0.55f)
+    hsv[2] = hsv[2].coerceIn(0.75f, 1f)
+    Color(android.graphics.Color.HSVToColor(hsv))
+}.getOrNull()
+
+/** Detay sayfası oyunun kapak rengiyle açılır. */
 @Composable
 fun DetailSheet(s: AppState, pkg: String, onClose: () -> Unit) {
+    val g = s.games.find { it.pkg == pkg }
+    if (g == null) { LaunchedEffect(Unit) { onClose() }; return }
+    val ctx = LocalContext.current
+    val base = MaterialTheme.colorScheme
+    val tint = remember(g.pkg, g.cover, g.autoCover) { coverColor(ctx, g) }
+    val scheme = if (tint == null) base else {
+        val dark = base.background.luminance() < 0.5f
+        val p = if (dark) tint else lerp(tint, Color.Black, 0.15f)
+        val onP = if (p.luminance() > 0.45f) Color(0xFF111111) else Color.White
+        base.copy(
+            primary = p, onPrimary = onP,
+            primaryContainer = lerp(base.background, p, if (dark) 0.30f else 0.22f),
+            onPrimaryContainer = if (dark) lerp(p, Color.White, 0.65f) else lerp(p, Color.Black, 0.45f),
+            secondary = p, onSecondary = onP, tertiary = p, onTertiary = onP
+        )
+    }
+    MaterialTheme(colorScheme = scheme) { DetailSheetContent(s, pkg, onClose) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DetailSheetContent(s: AppState, pkg: String, onClose: () -> Unit) {
     val g = s.games.find { it.pkg == pkg }
     if (g == null) { LaunchedEffect(Unit) { onClose() }; return }
     val ctx = LocalContext.current
@@ -444,6 +804,22 @@ fun DetailSheet(s: AppState, pkg: String, onClose: () -> Unit) {
                 InfoRow("Telefona yüklenme", fmtDate(installed))
                 InfoRow("Listeye eklenme", fmtDate(g.addedAt))
                 InfoRow("Son oynanma", if (g.lastPlayed > 0) fmtDate(g.lastPlayed) else "Henüz oynanmadı")
+            }
+
+            Text(
+                "Grup", Modifier.padding(start = 4.dp, top = 18.dp, bottom = 8.dp),
+                style = MaterialTheme.typography.titleSmall, color = cs.onSurfaceVariant
+            )
+            if (s.groups.isEmpty()) {
+                Text(
+                    "Ana ekrandaki \"+ Grup\" ile grup oluştur, sonra buradan oyuna ata.",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+                )
+            } else {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { FlatChip("Yok", s.groupOf[pkg] == null) { s.setGroup(pkg, null) } }
+                    items(s.groups, key = { it }) { n -> FlatChip(n, s.groupOf[pkg] == n) { s.setGroup(pkg, n) } }
+                }
             }
 
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -497,14 +873,95 @@ private fun InfoRow(label: String, value: String) {
 
 // ---------------------------------------------------------------- İstatistik
 
+private class Records(
+    val curStreak: Int,
+    val bestStreak: Int,
+    val longest: Session?,
+    val bestDay: Pair<LocalDate, Long>?
+)
+
+private fun computeRecords(sessions: List<Session>): Records {
+    val z = ZoneId.systemDefault()
+    val perDay = HashMap<LocalDate, Long>()
+    for (se in sessions) {
+        var day = Instant.ofEpochMilli(se.start).atZone(z).toLocalDate()
+        val lastDay = Instant.ofEpochMilli(se.end).atZone(z).toLocalDate()
+        var guard = 0
+        while (!day.isAfter(lastDay) && guard++ < 400) {
+            val a = maxOf(se.start, day.atStartOfDay(z).toInstant().toEpochMilli())
+            val b = minOf(se.end, day.plusDays(1).atStartOfDay(z).toInstant().toEpochMilli())
+            if (b > a) perDay[day] = (perDay[day] ?: 0L) + (b - a)
+            day = day.plusDays(1)
+        }
+    }
+    var best = 0
+    var run = 0
+    var prev: LocalDate? = null
+    for (dd in perDay.keys.sorted()) {
+        run = if (prev != null && prev.plusDays(1) == dd) run + 1 else 1
+        if (run > best) best = run
+        prev = dd
+    }
+    val today = LocalDate.now(z)
+    var cur = 0
+    var cursor = if (perDay.containsKey(today)) today else today.minusDays(1)
+    while (perDay.containsKey(cursor)) { cur++; cursor = cursor.minusDays(1) }
+    return Records(
+        cur, best,
+        sessions.maxByOrNull { it.end - it.start },
+        perDay.entries.maxByOrNull { it.value }?.let { it.key to it.value }
+    )
+}
+
+@Composable
+private fun RecordTile(label: String, value: String, sub: String, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    Column(modifier.clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainer).padding(16.dp)) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
+        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp, maxLines = 1)
+        Text(sub, Modifier.padding(top = 2.dp), fontSize = 12.sp, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Oturum geçmişini CSV olarak paylaşır (Excel için ; ayraçlı, UTF-8). */
+private fun exportCsv(ctx: Context, s: AppState) {
+    runCatching {
+        val names = s.games.associate { it.pkg to it.name }
+        val f = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+        val sb = StringBuilder("\uFEFFoyun;paket;baslangic;bitis;sure_dk\n")
+        s.sessions.sortedBy { it.start }.forEach { se ->
+            val n = (names[se.pkg] ?: se.pkg).replace("\"", "\"\"")
+            sb.append('"').append(n).append("\";").append(se.pkg).append(';')
+                .append(f.format(Date(se.start))).append(';').append(f.format(Date(se.end))).append(';')
+                .append((se.end - se.start) / 60_000).append('\n')
+        }
+        val dir = File(ctx.cacheDir, "updates").apply { mkdirs() }
+        val file = File(dir, "oyun-istatistikleri.csv")
+        file.writeText(sb.toString())
+        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        ctx.startActivity(Intent.createChooser(send, "İstatistikleri paylaş").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.onFailure {
+        android.widget.Toast.makeText(ctx, "Dışa aktarılamadı", android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
 @Composable
 fun StatsTab(s: AppState, onGame: (String) -> Unit) {
+    val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
     val totals = remember(s.sessions) { Range.entries.associateWith { playedMs(s.sessions, null, it) } }
     val ranked = remember(s.sessions, s.games) {
         s.games.map { it to playedMs(s.sessions, it.pkg, Range.ALL) }.sortedByDescending { it.second }
     }
+    val rec = remember(s.sessions) { computeRecords(s.sessions) }
     val maxMs = (ranked.firstOrNull()?.second ?: 0L).coerceAtLeast(1L)
+    val dayFmt = remember { DateTimeFormatter.ofPattern("d MMMM", Locale("tr")) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cs.primary).padding(22.dp)) {
@@ -522,7 +979,35 @@ fun StatsTab(s: AppState, onGame: (String) -> Unit) {
         }
 
         Text(
-            "En çok oynananlar", Modifier.padding(start = 4.dp, top = 14.dp, bottom = 10.dp),
+            "Seri ve rekorlar", Modifier.padding(start = 4.dp, top = 14.dp, bottom = 10.dp),
+            style = MaterialTheme.typography.titleMedium
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            RecordTile(
+                "Mevcut seri", "${rec.curStreak} gün",
+                if (rec.curStreak > 0) "Üst üste oynanan gün" else "Bugün oyna, seri başlasın",
+                Modifier.weight(1f)
+            )
+            RecordTile("En uzun seri", "${rec.bestStreak} gün", "Şimdiye kadarki en iyi", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val l = rec.longest
+            RecordTile(
+                "En uzun oturum", if (l != null) fmtDur(l.end - l.start) else "—",
+                l?.let { x -> s.games.find { it.pkg == x.pkg }?.name ?: "" } ?: "Henüz kayıt yok",
+                Modifier.weight(1f)
+            )
+            val bd = rec.bestDay
+            RecordTile(
+                "En yoğun gün", if (bd != null) fmtDur(bd.second) else "—",
+                bd?.first?.format(dayFmt) ?: "Henüz kayıt yok",
+                Modifier.weight(1f)
+            )
+        }
+
+        Text(
+            "En çok oynananlar", Modifier.padding(start = 4.dp, top = 22.dp, bottom = 10.dp),
             style = MaterialTheme.typography.titleMedium
         )
         ranked.forEachIndexed { i, (g, ms) ->
@@ -556,6 +1041,10 @@ fun StatsTab(s: AppState, onGame: (String) -> Unit) {
         if (ranked.isEmpty()) {
             Text("Henüz oyun yok.", Modifier.padding(4.dp), color = cs.onSurfaceVariant)
         }
+        SoftButton(
+            "CSV olarak paylaş", { exportCsv(ctx, s) },
+            Modifier.fillMaxWidth().padding(top = 6.dp), icon = Icons.Default.Share
+        )
         Spacer(Modifier.height(160.dp))
     }
 }

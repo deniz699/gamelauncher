@@ -18,8 +18,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -103,7 +105,7 @@ private fun flatScheme(a: Color, dark: Boolean, amoled: Boolean): ColorScheme {
 }
 
 @Composable
-fun LauncherTheme(mode: Int, accent: Int, dynamic: Boolean, content: @Composable () -> Unit) {
+fun LauncherTheme(mode: Int, accent: Int, dynamic: Boolean, fontStep: Int = 1, content: @Composable () -> Unit) {
     val dark = when (mode) { 1 -> false; 2, 3 -> true; else -> isSystemInDarkTheme() }
     val ctx = LocalContext.current
     val scheme = if (dynamic && Build.VERSION.SDK_INT >= 31) {
@@ -118,6 +120,12 @@ fun LauncherTheme(mode: Int, accent: Int, dynamic: Boolean, content: @Composable
     }
     MaterialTheme(colorScheme = scheme, typography = AppTypography, shapes = AppShapes) {
         // Surface/Scaffold dışındaki yazı ve ikonlar da temaya göre açık/koyu olsun
-        CompositionLocalProvider(LocalContentColor provides scheme.onBackground, content = content)
+        val d = LocalDensity.current
+        val mult = when (fontStep) { 0 -> 0.9f; 2 -> 1.15f; else -> 1f }
+        CompositionLocalProvider(
+            LocalContentColor provides scheme.onBackground,
+            LocalDensity provides Density(d.density, d.fontScale * mult),
+            content = content
+        )
     }
 }
