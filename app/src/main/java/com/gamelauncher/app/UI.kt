@@ -630,18 +630,10 @@ private fun GameTile(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit)
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp))) {
             Cover(g, Modifier.fillMaxSize())
-            Box(
-                Modifier.align(Alignment.TopEnd).padding(8.dp).size(34.dp).clip(CircleShape)
-                    .background(if (g.favorite) cs.primary else cs.background)
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { s.toggleFav(g.pkg) },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    if (g.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    "Favori", Modifier.size(18.dp),
-                    tint = if (g.favorite) cs.onPrimary else cs.onSurface
-                )
-            }
+            HeartButton(
+                g.favorite, { s.toggleFav(g.pkg) },
+                Modifier.align(Alignment.TopEnd).padding(8.dp), 34.dp, cs.background, 18.dp
+            )
         }
         Text(
             g.name, Modifier.fillMaxWidth().padding(horizontal = 6.dp).padding(top = 12.dp),
@@ -661,8 +653,7 @@ private fun GameTile(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit)
             }
             Spacer(Modifier.weight(1f))
             Box(
-                Modifier.size(36.dp).clip(CircleShape).background(cs.primary)
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { s.launch(g.pkg) },
+                Modifier.size(36.dp).flatClick { s.launch(g.pkg) }.clip(CircleShape).background(cs.primary),
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Default.PlayArrow, "Oyna", Modifier.size(22.dp), tint = cs.onPrimary) }
         }
@@ -689,22 +680,10 @@ private fun GameRow(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit) 
             Spacer(Modifier.height(4.dp))
             Text(fmtDur(total), fontSize = 13.sp, color = cs.onSurfaceVariant, maxLines = 1)
         }
-        Box(
-            Modifier.size(40.dp).clip(CircleShape)
-                .background(if (g.favorite) cs.primary else cs.surfaceContainerHighest)
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { s.toggleFav(g.pkg) },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                if (g.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                "Favori", Modifier.size(20.dp),
-                tint = if (g.favorite) cs.onPrimary else cs.onSurface
-            )
-        }
+        HeartButton(g.favorite, { s.toggleFav(g.pkg) }, size = 40.dp, container = cs.surfaceContainerHighest, iconSize = 20.dp)
         Spacer(Modifier.width(8.dp))
         Box(
-            Modifier.size(40.dp).clip(CircleShape).background(cs.primary)
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { s.launch(g.pkg) },
+            Modifier.size(40.dp).flatClick { s.launch(g.pkg) }.clip(CircleShape).background(cs.primary),
             contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.PlayArrow, "Oyna", Modifier.size(24.dp), tint = cs.onPrimary) }
         Spacer(Modifier.width(2.dp))
@@ -1223,8 +1202,7 @@ fun SegmentedChoice(options: List<String>, selected: Int, onSelect: (Int) -> Uni
             val bg by animateColorAsState(if (sel) cs.primary else Color.Transparent, tween(180), label = "segBg")
             val fg by animateColorAsState(if (sel) cs.onPrimary else cs.onSurfaceVariant, tween(180), label = "segFg")
             Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(bg)
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(i) }
+                Modifier.weight(1f).flatClick { onSelect(i) }.clip(RoundedCornerShape(14.dp)).background(bg)
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
