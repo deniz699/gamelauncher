@@ -339,7 +339,13 @@ object IconSwitcher {
 
     /** Şu an hangi simge açık (tanı için). */
     fun state(ctx: Context): String = runCatching {
-        "Beyaz ${if (on(ctx, LIGHT, true)) "açık" else "kapalı"}, Siyah ${if (on(ctx, DARK, false)) "açık" else "kapalı"}"
+        val light = on(ctx, LIGHT, true)
+        val dark = on(ctx, DARK, false)
+        when {
+            light && !dark -> "Beyaz"
+            dark && !light -> "Siyah"
+            else -> "Beyaz ${if (light) "açık" else "kapalı"}, Siyah ${if (dark) "açık" else "kapalı"}"
+        }
     }.getOrElse { "okunamadı: ${it.javaClass.simpleName}" }
 
     /** Seçime göre simgeyi eşitler. Hata olursa mesajını döndürür, yoksa null. */

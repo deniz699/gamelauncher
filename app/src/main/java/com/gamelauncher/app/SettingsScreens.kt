@@ -124,7 +124,7 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
             val iconCtx = LocalContext.current
             var iconStatus by remember { mutableStateOf(IconSwitcher.state(iconCtx)) }
             Text(
-                "Şu an: $iconStatus",
+                "Şu an: $iconStatus\n(ONE UI sürümlerde çalışmayabilir)",
                 Modifier.padding(top = 10.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = cs.onSurfaceVariant
