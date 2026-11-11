@@ -7,23 +7,60 @@ import android.os.Build
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-/** Root (su) çalıştırma. su yoksa ya da izin verilmezse null döner. */
+/**
+ * Root (su) çalıştırma. su yoksa ya da izin verilmezse null döner.
+ * KernelSU / Magisk / APatch için birkaç su yolu denenir; çalışan yol hatırlanır.
+ */
 object Root {
-    fun run(cmd: String, timeoutSec: Long = 40): Pair<Int, String>? = runCatching {
-        val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
+    private val CANDIDATES = listOf(
+        "su", "/system/bin/su", "/system/xbin/su", "/data/adb/ksu/bin/su",
+        "/data/adb/ap/bin/su", "/data/adb/magisk/su", "/sbin/su", "/debug_ramdisk/su"
+    )
+    @Volatile private var good: String? = null
+
+    /** Son kontrolün neden başarısız olduğu (kullanıcıya gösterilir). */
+    @Volatile var diag: String = ""
+        private set
+
+    private fun exec(su: String, cmd: String, timeoutSec: Long): Pair<Int, String> {
+        val p = ProcessBuilder(su, "-c", cmd).redirectErrorStream(true).start()
         var out = ""
-        val reader = Thread { out = p.inputStream.bufferedReader().readText() }
+        val reader = Thread { out = runCatching { p.inputStream.bufferedReader().readText() }.getOrDefault("") }
         reader.start()
         if (!p.waitFor(timeoutSec, TimeUnit.SECONDS)) {
             p.destroy()
-            return@runCatching null
+            throw java.io.IOException("zaman aşımı")
         }
         reader.join(2000)
-        p.exitValue() to out.trim()
-    }.getOrNull()
+        return p.exitValue() to out.trim()
+    }
 
-    fun available(): Boolean =
-        run("id")?.let { it.first == 0 && it.second.contains("uid=0") } == true
+    fun run(cmd: String, timeoutSec: Long = 40): Pair<Int, String>? {
+        val su = good ?: (if (available()) good else null) ?: return null
+        return try { exec(su, cmd, timeoutSec) } catch (e: Exception) { null }
+    }
+
+    /** Her çağrıda yeniden dener (olumsuz sonuç hatırlanmaz). */
+    fun available(): Boolean {
+        val log = StringBuilder()
+        for (su in CANDIDATES) {
+            try {
+                val r = exec(su, "id", 15)
+                if (r.first == 0 && r.second.contains("uid=0")) {
+                    good = su
+                    diag = ""
+                    return true
+                }
+                log.append(su).append(": çıkış ").append(r.first).append(" ")
+                    .append(r.second.lineSequence().firstOrNull().orEmpty().take(80)).append('\n')
+            } catch (e: Exception) {
+                log.append(su).append(": ").append(e.message.orEmpty().take(80)).append('\n')
+            }
+        }
+        good = null
+        diag = log.toString().trim()
+        return false
+    }
 }
 
 data class CpuPolicy(

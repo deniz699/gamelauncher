@@ -2,7 +2,16 @@ package com.gamelauncher.app
 
 import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -81,7 +90,10 @@ fun PerformancePage(onClose: () -> Unit) {
     LaunchedEffect(recheck) {
         rootState = 0
         info = null
+        val t0 = System.currentTimeMillis()
         val ok = withContext(Dispatchers.IO) { Root.available() }
+        val left = 900 - (System.currentTimeMillis() - t0)   // kontrol anında bitse de dönme animasyonu görünsün
+        if (left > 0) delay(left)
         rootState = if (ok) 1 else 2
         if (ok) info = withContext(Dispatchers.IO) { Perf.read() }
     }
@@ -149,13 +161,15 @@ fun PerformancePage(onClose: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // ---- Root durumu
-                FlatCard {
+                FlatCard(Modifier.animateContentSize()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Root erişimi", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                        when (rootState) {
-                            0 -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp, color = cs.primary)
-                            1 -> StatusChip(true, "Root var", "")
-                            else -> StatusChip(false, "", "Root yok")
+                        Crossfade(rootState, animationSpec = tween(250), label = "rootChip") { st ->
+                            when (st) {
+                                0 -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp, color = cs.primary)
+                                1 -> StatusChip(true, "Root var", "")
+                                else -> StatusChip(false, "", "Root yok")
+                            }
                         }
                     }
                     Text(
@@ -173,9 +187,19 @@ fun PerformancePage(onClose: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
                     )
                     if (rootState == 2) {
-                        SoftButton(
-                            "Tekrar kontrol et", { recheck++ },
-                            Modifier.fillMaxWidth().padding(top = 14.dp), icon = Icons.Default.Refresh
+                        val d = Root.diag
+                        if (d.isNotEmpty()) {
+                            Text(
+                                "KernelSU kullanıyorsan: KernelSU > Süper kullanıcı listesinden bu uygulamaya izin verdiğinden emin ol, sonra tekrar kontrol et.\n\nTeknik ayrıntı:\n$d",
+                                Modifier.padding(top = 8.dp),
+                                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (rootState != 1) {
+                        RootCheckButton(
+                            loading = rootState == 0, onClick = { if (rootState != 0) recheck++ },
+                            modifier = Modifier.fillMaxWidth().padding(top = 14.dp)
                         )
                     }
                 }
@@ -352,4 +376,42 @@ private fun WarnLine(lead: String, text: String) {
         },
         Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = c
     )
+}
+
+/** "Tekrar kontrol et": basınca küçülür, kontrol sürerken yerinde dönen yükleme işareti gösterir. */
+@Composable
+private fun RootCheckButton(loading: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val src = remember { MutableInteractionSource() }
+    val down by src.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (down) 0.96f else 1f, spring(dampingRatio = 0.65f, stiffness = 450f), label = "rcScale")
+    val bg by animateColorAsState(
+        if (loading) cs.primaryContainer else cs.surfaceContainerHighest, tween(250), label = "rcBg"
+    )
+    Row(
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(14.dp))
+            .background(bg)
+            .clickable(interactionSource = src, indication = null, enabled = !loading, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Crossfade(loading, animationSpec = tween(200), label = "rcContent") { l ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (l) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = cs.onPrimaryContainer)
+                } else {
+                    Icon(Icons.Default.Refresh, null, Modifier.size(18.dp), tint = cs.onSurface)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (l) "Kontrol ediliyor…" else "Tekrar kontrol et",
+                    color = if (l) cs.onPrimaryContainer else cs.onSurface,
+                    fontWeight = FontWeight.Medium, fontSize = 14.sp
+                )
+            }
+        }
+    }
 }
