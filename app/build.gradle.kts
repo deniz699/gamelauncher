@@ -16,8 +16,8 @@ android {
         // Uygulama içi "Güncellemeler" bu numarayı GitHub'daki son sürümle karşılaştırır.
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = run
-        // Kullanıcıya görünen sürüm yazısı. İstediğin gibi değiştir (ör. "1.1.0"); güncelleme kontrolü buna değil, yukarıdaki versionCode'a bakar.
-        versionName = "1.0.0"
+        // Görünen sürüm: Actions her derlemede 1.0.1, 1.0.2 … diye artırıp APP_VERSION olarak verir. Yerelde 1.0.0.
+        versionName = System.getenv("APP_VERSION") ?: "1.0.0"
         // Güncellemelerin aranacağı herkese açık, yalnızca APK içeren depo ("kullanici/gamelauncher-releases").
         // Actions'ta RELEASES_REPO olarak otomatik dolar, yerelde boş kalır.
         buildConfigField("String", "GITHUB_REPO", "\"${System.getenv("RELEASES_REPO") ?: ""}\"")
