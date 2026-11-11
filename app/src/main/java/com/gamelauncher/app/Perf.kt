@@ -217,7 +217,7 @@ object Perf {
     private fun write(cmds: List<Pair<String, String>>): Int {
         if (cmds.isEmpty()) return 0
         val script = cmds.joinToString("\n") { (p, v) -> "echo $v > $p 2>/dev/null || echo FAIL" }
-        val out = Root.run(script) ?: return cmds.size
+        val out = Root.run(script)?.second ?: return cmds.size
         return out.lines().count { it.trim() == "FAIL" }
     }
 
