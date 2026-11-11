@@ -5,7 +5,6 @@ on:
   workflow_dispatch:
 
 env:
-  # Yalnızca APK'ların durduğu herkese açık depo: kullanici/gamelauncher-releases
   RELEASES_REPO: ${{ github.repository_owner }}/gamelauncher-releases
 
 jobs:
@@ -13,6 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Sürüm numarasını belirle
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          LAST=$(gh release list --repo "$RELEASES_REPO" --limit 1 --json tagName -q '.[0].tagName' || true)
+          if [[ "$LAST" =~ ^v1\.0\.([0-9]+)-[0-9]+$ ]]; then PATCH=$((BASH_REMATCH[1] + 1)); else PATCH=0; fi
+          echo "APP_VERSION=1.0.${PATCH}" >> "$GITHUB_ENV"
+          echo "Bu derlemenin sürümü: 1.0.${PATCH}"
 
       - uses: actions/setup-java@v4
         with:
@@ -34,12 +42,13 @@ jobs:
           name: GameLauncher-apk
           path: GameLauncher.apk
 
-      - name: Herkese açık depoda sürüm yayınla (yalnızca APK)
+      - name: Herkese açık depoda sürüm yayınla
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
-          gh release create "v1.0.${GITHUB_RUN_NUMBER}" GameLauncher.apk \
+          VERSION="$APP_VERSION"
+          gh release create "v${VERSION}-${GITHUB_RUN_NUMBER}" GameLauncher.apk \
             --repo "$RELEASES_REPO" \
-            --title "Sürüm 1.0.${GITHUB_RUN_NUMBER}" \
-            --notes "Game Launcher 1.0.${GITHUB_RUN_NUMBER}" \
+            --title "Game Launcher ${VERSION}" \
+            --notes "" \
             --latest
