@@ -1153,14 +1153,24 @@ fun PlayButton(onClick: () -> Unit, modifier: Modifier = Modifier, label: String
 
 /** Düz, tonlu buton: gölge/ripple yok, basınca yumuşakça küçülür. */
 @Composable
-fun SoftButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+/** [accentOnPress] true ise yalnızca basılıyken vurgu rengine (primary) döner. */
+fun SoftButton(
+    label: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null,
+    accentOnPress: Boolean = false
+) {
     val src = remember { MutableInteractionSource() }
     val down by src.collectIsPressedAsState()
     val scale by animateFloatAsState(if (down) 0.96f else 1f, spring(dampingRatio = 0.65f, stiffness = 450f), label = "sbScale")
     val cs = MaterialTheme.colorScheme
+    val accent = accentOnPress && down
     val bg by animateColorAsState(
-        if (down) cs.surfaceContainerHighest.copy(alpha = 0.7f) else cs.surfaceContainerHighest, tween(140), label = "sbBg"
+        when {
+            accent -> cs.primary
+            down -> cs.surfaceContainerHighest.copy(alpha = 0.7f)
+            else -> cs.surfaceContainerHighest
+        }, tween(140), label = "sbBg"
     )
+    val fg by animateColorAsState(if (accent) cs.onPrimary else cs.onSurface, tween(140), label = "sbFg")
     Row(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
@@ -1172,10 +1182,10 @@ fun SoftButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
-            Icon(icon, null, Modifier.size(18.dp), tint = cs.onSurface)
+            Icon(icon, null, Modifier.size(18.dp), tint = fg)
             Spacer(Modifier.width(8.dp))
         }
-        Text(label, color = cs.onSurface, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+        Text(label, color = fg, fontWeight = FontWeight.Medium, fontSize = 14.sp)
     }
 }
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Image as ImageIcon
@@ -184,7 +185,7 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PlayButton({ showWrapped = true }, Modifier.weight(1f), label = "Wrapped")
+                    SoftButton("Wrapped", { showWrapped = true }, Modifier.weight(1f), icon = Icons.Default.AutoAwesome, accentOnPress = true)
                     SoftButton("Kapak", { coverOpen = !coverOpen }, Modifier.weight(1f), icon = Icons.Default.ImageIcon)
                 }
                 if (coverOpen) {
