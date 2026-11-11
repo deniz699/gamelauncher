@@ -24,6 +24,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -130,14 +138,11 @@ fun App(s: AppState) {
     Box(Modifier.fillMaxSize().background(cs.background)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HomeHeader(
-                s, tab, searching,
+                s, tab, searching, query, { query = it },
                 onSearch = { searching = !searching; if (!searching) query = "" },
                 onAppearance = { showAppearance = true },
                 onSettings = { showSettings = true }
             )
-            if (searching && tab != 2) {
-                FlatSearchField(query, { query = it }, "Oyun ara", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-            }
             if (tab != 2) {
                 FilterRow(s, activeGroup, { group = it }, { showNewGroup = true }, { delGroup = it })
             }
@@ -209,7 +214,7 @@ fun App(s: AppState) {
 
 @Composable
 private fun HomeHeader(
-    s: AppState, tab: Int, searching: Boolean,
+    s: AppState, tab: Int, searching: Boolean, query: String, onQuery: (String) -> Unit,
     onSearch: () -> Unit, onAppearance: () -> Unit, onSettings: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
@@ -219,43 +224,106 @@ private fun HomeHeader(
         1 -> "${s.games.count { it.favorite }} oyun"
         else -> "Oynama süreleri"
     }
-    Row(
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val expanded = searching && tab != 2
+    BoxWithConstraints(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineLarge)
-            Text(sub, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Kutu, sağdaki palet + ayar düğmelerinin soluna kadar genişler
+        val full = maxWidth - 104.dp
+        val sw by animateDpAsState(
+            if (expanded) full else 44.dp,
+            spring(dampingRatio = 0.85f, stiffness = 380f), label = "searchW"
+        )
+        val prog = if (full > 44.dp) ((sw - 44.dp) / (full - 44.dp)).coerceIn(0f, 1f) else 0f
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).graphicsLayer { alpha = 1f - prog }) {
+                Text(title, style = MaterialTheme.typography.headlineLarge, maxLines = 1)
+                Text(sub, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, maxLines = 1)
+            }
             if (tab != 2) {
-                IconBox(
-                    if (searching) Icons.Default.Close else Icons.Default.Search,
-                    if (searching) "Aramayı kapat" else "Ara", onSearch,
-                    container = if (searching) cs.primaryContainer else cs.surfaceContainerHigh,
-                    tint = if (searching) cs.onPrimaryContainer else cs.onSurface
-                )
+                SearchPill(sw, expanded, query, onQuery, onSearch)
+                Spacer(Modifier.width(8.dp))
             }
             IconBox(Icons.Default.Palette, "Görünüm", onAppearance)
+            Spacer(Modifier.width(8.dp))
             IconBox(Icons.Default.Settings, "Ayarlar", onSettings)
         }
     }
 }
 
+/** Dokununca soldan sağa değil, sağdan sola doğru kayarak açılan arama kutusu. */
 @Composable
-private fun FlatChip(label: String, selected: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+private fun SearchPill(
+    width: Dp, active: Boolean, query: String, onQuery: (String) -> Unit, onToggle: () -> Unit
+) {
     val cs = MaterialTheme.colorScheme
-    val bg by animateColorAsState(if (selected) cs.primary else cs.surfaceContainerHigh, tween(180), label = "chipBg")
-    val fg by animateColorAsState(if (selected) cs.onPrimary else cs.onSurface, tween(180), label = "chipFg")
-    Box(
-        Modifier.flatClick(onLongClick = onLongClick, onClick = onClick)
-            .clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 16.dp, vertical = 9.dp)
+    val fr = remember { FocusRequester() }
+    val focus = LocalFocusManager.current
+    val src = remember { MutableInteractionSource() }
+    LaunchedEffect(active) {
+        if (active) {
+            delay(220)
+            runCatching { fr.requestFocus() }
+        } else {
+            focus.clearFocus()
+        }
+    }
+    Row(
+        Modifier.width(width).height(44.dp).clip(RoundedCornerShape(14.dp))
+            .background(if (active) cs.surfaceContainerHighest else cs.surfaceContainerHigh)
+            .clickable(enabled = !active, interactionSource = src, indication = null) { onToggle() },
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, color = fg, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1)
+        Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Search, "Ara", Modifier.size(22.dp), tint = cs.onSurface)
+        }
+        if (width > 120.dp) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (query.isEmpty()) {
+                    Text("Oyun ara", color = cs.onSurfaceVariant, fontSize = 16.sp, maxLines = 1)
+                }
+                BasicTextField(
+                    value = query, onValueChange = onQuery, singleLine = true,
+                    textStyle = TextStyle(color = cs.onSurface, fontSize = 16.sp),
+                    cursorBrush = SolidColor(cs.primary),
+                    modifier = Modifier.fillMaxWidth().focusRequester(fr)
+                )
+            }
+            Box(
+                Modifier.size(44.dp).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onToggle() },
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.Close, "Aramayı kapat", Modifier.size(20.dp), tint = cs.onSurfaceVariant) }
+        }
     }
 }
 
-/** Gruplar (uzun basınca silinir) + liste/ızgara geçişi + sıralama. */
+@Composable
+private fun FlatChip(
+    label: String, selected: Boolean,
+    onLongClick: (() -> Unit)? = null, onTrailing: (() -> Unit)? = null, onClick: () -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+    val bg by animateColorAsState(if (selected) cs.primary else cs.surfaceContainerHigh, tween(180), label = "chipBg")
+    val fg by animateColorAsState(if (selected) cs.onPrimary else cs.onSurface, tween(180), label = "chipFg")
+    Row(
+        Modifier.flatClick(onLongClick = onLongClick, onClick = onClick)
+            .clip(RoundedCornerShape(50)).background(bg)
+            .padding(start = 16.dp, end = if (onTrailing != null) 8.dp else 16.dp, top = 9.dp, bottom = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = fg, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1)
+        if (onTrailing != null) {
+            Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier.size(22.dp).clip(CircleShape).background(fg.copy(alpha = 0.18f))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onTrailing() },
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.Close, "Grubu sil", Modifier.size(14.dp), tint = fg) }
+        }
+    }
+}
+
+/** Gruplar (seçiliyken ✕ ile ya da uzun basınca silinir) + liste/ızgara geçişi + sıralama. */
 @Composable
 private fun FilterRow(
     s: AppState, active: String?, onSelect: (String?) -> Unit, onNew: () -> Unit, onDelete: (String) -> Unit
@@ -269,7 +337,8 @@ private fun FilterRow(
         LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             item { FlatChip("Tümü", active == null) { onSelect(null) } }
             items(s.groups, key = { it }) { n ->
-                FlatChip(n, active == n, onLongClick = { onDelete(n) }) { onSelect(n) }
+                val del = if (active == n) ({ onDelete(n) }) else null
+                FlatChip(n, active == n, onLongClick = { onDelete(n) }, onTrailing = del) { onSelect(n) }
             }
             item { FlatChip("+ Grup", false) { onNew() } }
         }
@@ -437,10 +506,11 @@ private fun RecentStrip(s: AppState) {
     }
 }
 
-private fun weekBuckets(sessions: List<Session>): List<Pair<String, Long>> {
+private fun weekBuckets(sessions: List<Session>): List<Triple<String, String, Long>> {
     val z = ZoneId.systemDefault()
     val today = LocalDate.now(z)
-    val f = DateTimeFormatter.ofPattern("EEE", Locale("tr"))
+    val short = DateTimeFormatter.ofPattern("EEE", Locale("tr"))
+    val full = DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale("tr"))
     return (6 downTo 0).map { back ->
         val d = today.minusDays(back.toLong())
         val a0 = d.atStartOfDay(z).toInstant().toEpochMilli()
@@ -451,40 +521,53 @@ private fun weekBuckets(sessions: List<Session>): List<Pair<String, Long>> {
             val b = minOf(se.end, b0)
             if (b > a) sum += b - a
         }
-        d.format(f) to sum
+        Triple(d.format(short), d.format(full), sum)
     }
 }
 
-/** Son 7 günün günlük toplamları. Bugün vurgu renginde. */
+/** Son 7 gün: bir çubuğa dokununca o günün süresi üstte görünür. */
 @Composable
 private fun WeekCard(s: AppState) {
     val cs = MaterialTheme.colorScheme
     val days = remember(s.sessions) { weekBuckets(s.sessions) }
-    val maxV = days.maxOf { it.second }.coerceAtLeast(60_000L)
+    var sel by remember { mutableIntStateOf(6) }
+    val maxV = days.maxOf { it.third }.coerceAtLeast(60_000L)
+    val cur = days[sel.coerceIn(0, 6)]
     FlatCard(Modifier.padding(top = 10.dp), pad = 16.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Son 7 gün", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-            DurationText(days.sumOf { it.second }, cs.onSurface, 18.sp)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (sel == 6) "Bugün" else cur.second,
+                    style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "Haftalık toplam: ${fmtDur(days.sumOf { it.third })}",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            DurationText(cur.third, cs.onSurface, 22.sp)
         }
         Row(
             Modifier.fillMaxWidth().padding(top = 14.dp).height(84.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            days.forEachIndexed { i, (label, ms) ->
+            days.forEachIndexed { i, (label, _, ms) ->
                 Column(
-                    Modifier.weight(1f).fillMaxHeight(),
+                    Modifier.weight(1f).fillMaxHeight()
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { sel = i },
                     verticalArrangement = Arrangement.Bottom,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     val h = (56f * ms.toFloat() / maxV).coerceAtLeast(5f)
                     Box(
                         Modifier.fillMaxWidth().height(h.dp).clip(RoundedCornerShape(8.dp))
-                            .background(if (i == days.lastIndex) cs.primary else cs.primaryContainer)
+                            .background(if (i == sel) cs.primary else cs.primaryContainer)
                     )
                     Text(
                         label, Modifier.padding(top = 6.dp), fontSize = 11.sp, maxLines = 1,
-                        fontWeight = if (i == days.lastIndex) FontWeight.Bold else FontWeight.Normal,
-                        color = if (i == days.lastIndex) cs.onSurface else cs.onSurfaceVariant
+                        fontWeight = if (i == sel) FontWeight.Bold else FontWeight.Normal,
+                        color = if (i == sel) cs.onSurface else cs.onSurfaceVariant
                     )
                 }
             }
