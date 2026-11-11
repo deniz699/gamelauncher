@@ -614,19 +614,10 @@ private fun HelpPage() {
 
 @Composable
 private fun AboutPage() {
-    val context = LocalContext.current
-    val cur = remember { Updater.current(context) }
     val cs = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Game Launcher", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Sürüm ${cur.name}", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.titleMedium, color = cs.primary)
-        Text("Derleme ${cur.code}", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-        Text(
-            "Oyunlarını, oynama sürelerini ve widget'larını tek yerde topla.",
-            Modifier.padding(top = 16.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = cs.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
+        Text("Sürüm 1.0.0", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.titleMedium, color = cs.primary)
+        Text("2026", Modifier.padding(top = 32.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
     }
 }
