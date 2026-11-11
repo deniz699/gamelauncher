@@ -16,6 +16,49 @@ object CoverFetcher {
         return null
     }
 
+    /**
+     * Kapak seçerken gösterilecek görsel adresleri (en fazla 12).
+     * İnternet yoksa IOException fırlatır; hiçbir şey bulunamazsa boş liste döner.
+     */
+    fun suggestions(name: String, pkg: String): List<String> {
+        // İlk istek internet yoksa burada IOException fırlatır
+        val apple = itunesCandidates(name)
+        val out = LinkedHashSet<String>()
+        // Google Play: paket adı birebir tuttuğu için en güvenilir görsel
+        runCatching { playImageUrl(pkg) }.getOrNull()?.let { out += it }
+        out.addAll(apple)
+        return out.take(12)
+    }
+
+    /** Görseli indirir; hata olursa null. */
+    fun download(url: String): ByteArray? = runCatching { getOrNull(url) }.getOrNull()
+
+    private fun itunesCandidates(name: String): List<String> {
+        val body = getOrNull(
+            "https://itunes.apple.com/search?term=${URLEncoder.encode(name, "UTF-8")}&entity=software&limit=10"
+        ) ?: return emptyList()
+        return runCatching {
+            val arr = JSONObject(body.toString(Charsets.UTF_8)).optJSONArray("results") ?: return emptyList()
+            val n = norm(name)
+            val games = (0 until arr.length()).map { arr.getJSONObject(it) }
+                .filter { it.optJSONArray("genres")?.toString()?.contains("Games") == true }
+            val close = games.filter {
+                val t = norm(it.optString("trackName"))
+                t.length >= 3 && n.length >= 3 && (t.startsWith(n) || n.startsWith(t) || t.contains(n) || n.contains(t))
+            }
+            val urls = ArrayList<String>()
+            close.ifEmpty { games.take(3) }.forEach { o ->
+                val art = o.optString("artworkUrl512")
+                if (art.isNotEmpty()) urls += art
+                for (key in listOf("screenshotUrls", "ipadScreenshotUrls")) {
+                    val a = o.optJSONArray(key) ?: continue
+                    for (i in 0 until minOf(2, a.length())) urls += a.getString(i)
+                }
+            }
+            urls
+        }.getOrDefault(emptyList())
+    }
+
     /** Oyun adıyla arar, oyun ekran görüntüsü (yoksa resmi görsel) bulur. */
     private fun itunesImageUrl(name: String): String? {
         val body = getOrNull(

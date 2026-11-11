@@ -205,6 +205,25 @@ class AppState(private val ctx: Context) {
         }
     }
 
+    /** İnternetten indirilen görseli oyunun kapağı yapar. Başarılıysa true. */
+    fun setCoverBytes(pkg: String, bytes: ByteArray): Boolean {
+        return runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (bounds.outWidth / sample > 1000) sample *= 2
+            val bmp = BitmapFactory.decodeByteArray(
+                bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }
+            ) ?: return@runCatching false
+            val dir = File(ctx.filesDir, "covers").apply { mkdirs() }
+            val f = File(dir, "${pkg}_${System.currentTimeMillis()}.jpg")
+            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+            games.find { it.pkg == pkg }?.cover?.let { File(it).delete() }
+            update(pkg) { it.copy(cover = f.absolutePath) }
+            true
+        }.getOrDefault(false)
+    }
+
     fun clearCover(pkg: String) {
         games.find { it.pkg == pkg }?.cover?.let { File(it).delete() }
         update(pkg) { it.copy(cover = null) }

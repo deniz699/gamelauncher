@@ -154,11 +154,13 @@ fun App(s: AppState) {
                         s, visible(s.sortedGames()),
                         if (filtering) "Eşleşen oyun yok." else "Oyun bulunamadı. Telefondaki oyunlar otomatik eklenir.",
                         header = { HomeExtras(s, onStats = { tab = 2 }, onDevice = { showDevice = true }, onPerf = { showPerf = true }) },
-                        showHeader = !filtering
+                        showHeader = !filtering,
+                        onInfo = { statsGame = it }
                     ) { selected = it }
                     1 -> GameGrid(
                         s, visible(s.sortedGames().filter { it.favorite }),
-                        if (filtering) "Eşleşen oyun yok." else "Favori oyun yok. Kalbe dokunarak ekle."
+                        if (filtering) "Eşleşen oyun yok." else "Favori oyun yok. Kalbe dokunarak ekle.",
+                        onInfo = { statsGame = it }
                     ) { selected = it }
                     else -> StatsTab(s) { statsGame = it }
                 }
@@ -585,6 +587,7 @@ fun GameGrid(
     emptyText: String,
     header: (@Composable () -> Unit)? = null,
     showHeader: Boolean = true,
+    onInfo: (String) -> Unit = {},
     onOpen: (String) -> Unit
 ) {
     LazyVerticalGrid(
@@ -606,7 +609,7 @@ fun GameGrid(
             }
         }
         itemsIndexed(list, key = { _, g -> g.pkg }) { i, g ->
-            if (s.listView) GameRow(s, g, i, onOpen) else GameTile(s, g, i, onOpen)
+            if (s.listView) GameRow(s, g, i, onOpen, onInfo) else GameTile(s, g, i, onOpen, onInfo)
         }
     }
 }
@@ -624,7 +627,7 @@ private fun Modifier.enterAnim(index: Int): Modifier {
 
 /** Dokun = oyunu aç, uzun bas = detay. */
 @Composable
-private fun GameTile(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit) {
+private fun GameTile(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit, onInfo: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     val total = remember(s.sessions, g.pkg) { playedMs(s.sessions, g.pkg, Range.ALL) }
     Column(
@@ -656,6 +659,11 @@ private fun GameTile(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit)
             }
             Spacer(Modifier.weight(1f))
             Box(
+                Modifier.size(36.dp).flatClick { onInfo(g.pkg) }.clip(CircleShape).background(cs.surfaceContainerHighest),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.Info, "İstatistikler", Modifier.size(20.dp), tint = cs.onSurfaceVariant) }
+            Spacer(Modifier.width(8.dp))
+            Box(
                 Modifier.size(36.dp).flatClick { s.launch(g.pkg) }.clip(CircleShape).background(cs.primary),
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Default.PlayArrow, "Oyna", Modifier.size(22.dp), tint = cs.onPrimary) }
@@ -665,7 +673,7 @@ private fun GameTile(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit)
 
 /** Kompakt liste görünümü. */
 @Composable
-private fun GameRow(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit) {
+private fun GameRow(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit, onInfo: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     val total = remember(s.sessions, g.pkg) { playedMs(s.sessions, g.pkg, Range.ALL) }
     Row(
@@ -684,6 +692,11 @@ private fun GameRow(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit) 
             Text(fmtDur(total), fontSize = 13.sp, color = cs.onSurfaceVariant, maxLines = 1)
         }
         HeartButton(g.favorite, { s.toggleFav(g.pkg) }, size = 40.dp, container = cs.surfaceContainerHighest, iconSize = 20.dp)
+        Spacer(Modifier.width(8.dp))
+        Box(
+            Modifier.size(40.dp).flatClick { onInfo(g.pkg) }.clip(CircleShape).background(cs.surfaceContainerHighest),
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Default.Info, "İstatistikler", Modifier.size(22.dp), tint = cs.onSurfaceVariant) }
         Spacer(Modifier.width(8.dp))
         Box(
             Modifier.size(40.dp).flatClick { s.launch(g.pkg) }.clip(CircleShape).background(cs.primary),

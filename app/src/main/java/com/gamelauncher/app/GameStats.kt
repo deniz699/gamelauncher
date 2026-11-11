@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Image as ImageIcon
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -163,6 +164,10 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
     val total = values.sum()
     val cs = MaterialTheme.colorScheme
 
+    var showWrapped by remember { mutableStateOf(false) }
+    var coverOpen by remember { mutableStateOf(false) }
+
+    Box(Modifier.fillMaxSize()) {
     Surface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             ScreenTopBar(g.name, onClose)
@@ -177,6 +182,14 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
                         Text("Toplam süre", color = cs.onSurfaceVariant, fontSize = 12.sp)
                         Text(fmtDur(playedMs(s.sessions, pkg, Range.ALL)), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     }
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PlayButton({ showWrapped = true }, Modifier.weight(1f), label = "Wrapped")
+                    SoftButton("Kapak", { coverOpen = !coverOpen }, Modifier.weight(1f), icon = Icons.Default.ImageIcon)
+                }
+                if (coverOpen) {
+                    Spacer(Modifier.height(12.dp))
+                    CoverPickerCard(s, g)
                 }
                 Spacer(Modifier.height(16.dp))
                 SegmentedChoice(listOf("Günlük", "Haftalık", "Aylık"), mode) { mode = it; offset = 0 }
@@ -217,6 +230,8 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
                 )
             }
         }
+    }
+    if (showWrapped) WrappedPage(s, g) { showWrapped = false }
     }
 }
 
