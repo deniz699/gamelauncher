@@ -72,6 +72,8 @@ object EdgePrefs {
     fun setHudPos(ctx: Context, v: Int) = p(ctx).edit().putInt("hud_pos", v).apply()
     fun autoClean(ctx: Context): Boolean = p(ctx).getBoolean("auto_clean", false)
     fun setAutoClean(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("auto_clean", v).apply()
+    fun reportOn(ctx: Context): Boolean = p(ctx).getBoolean("report", false)
+    fun setReportOn(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("report", v).apply()
     fun edgeOn(ctx: Context): Boolean = p(ctx).getBoolean("edge", false)
 
     fun apps(ctx: Context): List<String> =

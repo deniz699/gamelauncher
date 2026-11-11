@@ -35,6 +35,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
+import androidx.core.content.ContextCompat
 import java.io.File
 import java.util.Locale
 import kotlin.math.abs
@@ -73,12 +75,37 @@ class EdgeService : Service() {
             if (fpsCounting) Choreographer.getInstance().postFrameCallback(this)
         }
     }
-    private val hudTick = object : Runnable {
+    // Saniyede bir örnekleme: gösterge (HUD) ve oyun raporu aynı ölçümü kullanır
+    private var sampling = false
+    private var sampleN = 0
+    private var lastFps = 0f
+    private val sampleTick = object : Runnable {
         override fun run() {
-            updateHud()
+            sample()
             handler.postDelayed(this, 1000)
         }
     }
+    @Volatile private var rootFps: Float? = null
+    private var rootBusy = false
+    private var rootTried = false
+
+    // Oyun oturumu raporu
+    private class Sess(val pkg: String, val start: Long, val batStart: Int, val charging: Boolean) {
+        var fpsSum = 0f
+        var fpsN = 0
+        var minFps = Float.MAX_VALUE
+        var maxBat = -1f
+        var maxCpu = -1f
+    }
+    private var sess: Sess? = null
+    private var outSince = 0L            // oyundan çıkıldığı an (0 = oyundayız)
+    private var reportView: View? = null
+    private val removeReportRun = Runnable { removeReport() }
+
+    // Isı koruması / panel düğmeleri
+    private var thermBusy = false
+    private var thermN = 0
+    private var perfBusy = false
 
     private val poll = object : Runnable {
         override fun run() {
@@ -103,7 +130,9 @@ class EdgeService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        stopSampling()
         stopHud()
+        removeReport()
         removeHandle()
         closePanel()
         super.onDestroy()
@@ -167,6 +196,9 @@ class EdgeService : Service() {
             panelApp = null; panelOwner = null
         }
         syncHud()
+        syncSession(cur)
+        syncSampling()
+        thermalTick()
         // Oyun açılınca bir kez RAM temizle (oyunun kendisi korunur)
         if (cur != null && cur in gamePkgs) {
             if (EdgePrefs.autoClean(this) && lastCleaned != cur) { lastCleaned = cur; Booster.clean(this, setOf(cur)) { } }
@@ -174,7 +206,7 @@ class EdgeService : Service() {
             lastCleaned = null
         }
         val show = EdgePrefs.edgeOn(this) && cur != null && (cur in gamePkgs || cur == panelApp)
-        if (!EdgePrefs.edgeOn(this) && !EdgePrefs.hudAny(this) && !EdgePrefs.autoClean(this)) { stopSelf(); return }
+        if (!keepAlive()) { stopSelf(); return }
         if (show && handleView != null && handleSig != edgeSig()) removeHandle()   // ayar değişti: yeniden çiz
         if (show && handleView == null && panelView == null) addHandle()
         if (!show) { removeHandle(); closePanel() }
@@ -240,21 +272,10 @@ class EdgeService : Service() {
             wm.addView(tv, lp)
             hudView = tv
             hudSig = hudSignature()
-            frames = 0
-            hudStart = System.currentTimeMillis()
-            if (EdgePrefs.hudFps(this)) {
-                fpsCounting = true
-                Choreographer.getInstance().postFrameCallback(frameCb)
-            }
-            handler.post(hudTick)
         }
     }
 
     private fun stopHud() {
-        if (hudView == null) return
-        handler.removeCallbacks(hudTick)
-        fpsCounting = false
-        Choreographer.getInstance().removeFrameCallback(frameCb)
         hudView?.let { runCatching { wm.removeView(it) } }
         hudView = null
     }
@@ -267,23 +288,20 @@ class EdgeService : Service() {
         )
         for (p in paths) {
             val t = runCatching { File(p).readText() }.getOrNull() ?: continue
-            val m = Regex("fps:?\\s*([0-9]+(?:\\.[0-9]+)?)").find(t) ?: Regex("([0-9]+(?:\\.[0-9]+)?)").find(t) ?: continue
-            return m.groupValues[1].toFloatOrNull()
+            parseFps(t)?.let { return it }
         }
         return null
+    }
+
+    private fun parseFps(t: String): Float? {
+        val m = Regex("fps:?\\s*([0-9]+(?:\\.[0-9]+)?)").find(t) ?: Regex("([0-9]+(?:\\.[0-9]+)?)").find(t) ?: return null
+        return m.groupValues[1].toFloatOrNull()
     }
 
     private fun updateHud() {
         val tv = hudView ?: return
         val lines = ArrayList<String>()
-        if (EdgePrefs.hudFps(this)) {
-            val now = System.currentTimeMillis()
-            val el = (now - hudStart).coerceAtLeast(1)
-            val fps = sysfsFps() ?: (frames * 1000f / el)
-            frames = 0
-            hudStart = now
-            lines += "FPS: ${fps.roundToInt()}"
-        }
+        if (EdgePrefs.hudFps(this)) lines += "FPS: ${lastFps.roundToInt()}"
         if (EdgePrefs.hudBat(this)) {
             val b = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             val t = b?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
@@ -467,6 +485,12 @@ class EdgeService : Service() {
         list.addView(hudToggle("FPS", { EdgePrefs.hudFps(this) }, { EdgePrefs.setHudFps(this, it) }), tl)
         list.addView(hudToggle("Pil", { EdgePrefs.hudBat(this) }, { EdgePrefs.setHudBat(this, it) }), tl)
         list.addView(hudToggle("CPU", { EdgePrefs.hudCpu(this) }, { EdgePrefs.setHudCpu(this, it) }), tl)
+        // Hızlı eylemler: güç seviyesi, RAM temizle, ekran kaydı
+        list.addView(actionBtn(perfLabel(Perf.level(this))) { tv -> cyclePerf(tv) }, tl)
+        list.addView(actionBtn("RAM") {
+            Booster.clean(this, setOfNotNull(fg)) { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
+        }, tl)
+        list.addView(actionBtn(if (ScreenRecordService.recording) "■ Dur" else "● Kayıt") { toggleRecord() }, tl)
         list.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (1 * d).toInt()).apply {
                 setMargins((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (4 * d).toInt())
@@ -546,6 +570,275 @@ class EdgeService : Service() {
             runCatching { startActivity(i, opts.toBundle()) }.onFailure { runCatching { startActivity(i) } }
         } else {
             runCatching { startActivity(i) }
+        }
+    }
+
+    // ------------------------------------------------ Panel eylemleri
+
+    private fun actionBtn(label: String, onClick: (TextView) -> Unit): TextView {
+        val d = density
+        return TextView(this).apply {
+            text = label
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            isClickable = true
+            setTextColor(0xFFFFFFFF.toInt())
+            background = GradientDrawable().apply { setColor(0x33FFFFFF); cornerRadius = 12 * d }
+            setOnClickListener { onClick(this) }
+        }
+    }
+
+    private fun perfLabel(l: Int) = when (l) { 1 -> "⚡ Perf"; 2 -> "⚡ Maks"; else -> "⚡ Denge" }
+
+    /** Dengeli -> Performans -> Maksimum -> Dengeli. Root gerekir; uyarı onayı Performans sayfasından verilmiş olmalı. */
+    private fun cyclePerf(tv: TextView) {
+        if (perfBusy) return
+        perfBusy = true
+        tv.alpha = 0.5f
+        val next = (Perf.level(this) + 1) % 3
+        val app = applicationContext
+        Thread {
+            val m = runCatching { Perf.quickSet(app, next) }.getOrDefault("Ayar uygulanamadı.")
+            handler.post {
+                perfBusy = false
+                tv.alpha = 1f
+                tv.text = perfLabel(Perf.level(this))
+                Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
+            }
+        }.start()
+    }
+
+    private fun toggleRecord() {
+        if (ScreenRecordService.recording) {
+            ScreenRecordService.stop()
+            closePanel()
+            return
+        }
+        // İzin penceresi bizim uygulamadan açılır; bu sırada çizgi ve oyun oturumu kapanmasın
+        panelApp = packageName
+        panelOwner = fg?.takeIf { it in gamePkgs }
+        panelLaunchTs = System.currentTimeMillis()
+        val i = Intent(this, ScreenRecordActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { startActivity(i) }.onFailure {
+            Toast.makeText(this, "Ekran kaydı başlatılamadı.", Toast.LENGTH_SHORT).show()
+        }
+        closePanel()
+    }
+
+    // ------------------------------------------------ Isı koruması (sayfa kapalıyken de çalışır)
+
+    private fun keepAlive() = EdgePrefs.edgeOn(this) || EdgePrefs.hudAny(this) || EdgePrefs.autoClean(this) ||
+        EdgePrefs.reportOn(this) || (Perf.level(this) > 0 && Perf.autoThermal(this))
+
+    private fun thermalTick() {
+        if (thermBusy || Perf.level(this) == 0 || thermN++ % 3 != 0) return
+        thermBusy = true
+        val t = perfBatteryTemp(this)
+        val app = applicationContext
+        Thread {
+            val m = runCatching { Perf.guard(app, t) }.getOrNull()
+            handler.post {
+                thermBusy = false
+                if (m != null) Toast.makeText(this, m, Toast.LENGTH_LONG).show()
+            }
+        }.start()
+    }
+
+    // ------------------------------------------------ Örnekleme (HUD + rapor)
+
+    private fun syncSampling() {
+        val c = fg
+        val inGame = c != null && c in gamePkgs
+        val want = (inGame || sess != null) && (EdgePrefs.hudAny(this) || EdgePrefs.reportOn(this))
+        if (want && !sampling) {
+            sampling = true
+            frames = 0
+            hudStart = System.currentTimeMillis()
+            handler.post(sampleTick)
+        } else if (!want && sampling) {
+            stopSampling()
+        }
+    }
+
+    private fun stopSampling() {
+        sampling = false
+        handler.removeCallbacks(sampleTick)
+        fpsCounting = false
+        Choreographer.getInstance().removeFrameCallback(frameCb)
+    }
+
+    private fun batteryInfo(): Triple<Int, Boolean, Float> {
+        val b = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val lvl = b?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = b?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+        val pct = if (lvl >= 0 && scale > 0) lvl * 100 / scale else -1
+        val chg = (b?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+        val t = b?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
+        return Triple(pct, chg, if (t == Int.MIN_VALUE) -1f else t / 10f)
+    }
+
+    /** Dosyayı uygulama okuyamıyorsa (SELinux) root ile okur; sonuç bir sonraki saniyede kullanılır. */
+    private fun pollRootFps() {
+        if (rootBusy || (rootTried && !Root.ready)) return   // root yoksa boşuna süreç açma
+        if ((System.currentTimeMillis() / 1000) % 2 != 0L) return   // 2 saniyede bir yeter
+        rootBusy = true
+        Thread {
+            val v = runCatching {
+                if (!Root.ready && !rootTried) { rootTried = true; Root.available() }
+                if (!Root.ready) null
+                else Root.run(
+                    "cat /sys/class/drm/sde-crtc-0/measured_fps /sys/class/graphics/fb0/measured_fps 2>/dev/null", 3
+                )?.second?.let { parseFps(it) }
+            }.getOrNull()
+            rootFps = v
+            rootBusy = false
+        }.start()
+    }
+
+    private fun sample() {
+        val now = System.currentTimeMillis()
+        val wantCount = EdgePrefs.hudFps(this)
+        if (wantCount && !fpsCounting) {
+            fpsCounting = true
+            frames = 0
+            hudStart = now
+            Choreographer.getInstance().postFrameCallback(frameCb)
+        } else if (!wantCount && fpsCounting) {
+            fpsCounting = false
+            Choreographer.getInstance().removeFrameCallback(frameCb)
+        }
+        val direct = sysfsFps()
+        if (direct == null) pollRootFps()
+        val real = direct ?: rootFps
+        val el = (now - hudStart).coerceAtLeast(1)
+        lastFps = real ?: (frames * 1000f / el)
+        frames = 0
+        hudStart = now
+
+        val s = sess
+        if (s != null && outSince == 0L) {
+            if (real != null && real > 1f) {
+                s.fpsSum += real
+                s.fpsN++
+                if (real < s.minFps) s.minFps = real
+            }
+            if (sampleN++ % 3 == 0) {
+                val bt = batteryInfo().third
+                if (bt > s.maxBat) s.maxBat = bt
+                cpuTempC()?.let { if (it > s.maxCpu) s.maxCpu = it }
+            }
+        }
+        updateHud()
+    }
+
+    // ------------------------------------------------ Oyun oturumu raporu
+
+    private fun syncSession(cur: String?) {
+        if (!EdgePrefs.reportOn(this)) { sess = null; outSince = 0; return }
+        val now = System.currentTimeMillis()
+        val s = sess
+        if (cur != null && cur in gamePkgs) {
+            outSince = 0
+            if (s == null || s.pkg != cur) {
+                if (s != null) endSession()
+                startSession(cur)
+            }
+        } else if (s != null) {
+            when {
+                cur != null && cur == panelApp -> outSince = 0   // panelden açılan uygulama üstte: oyun oturumu sürüyor
+                outSince == 0L -> outSince = now
+                now - outSince > 6000 -> endSession()           // kısa kesintilerde (bildirim, arama) oturum bölünmesin
+            }
+        }
+    }
+
+    private fun startSession(pkg: String) {
+        val (pct, chg, _) = batteryInfo()
+        sess = Sess(pkg, System.currentTimeMillis(), pct, chg)
+        outSince = 0
+        sampleN = 0
+        rootTried = false
+        rootFps = null
+    }
+
+    private fun endSession() {
+        val s = sess ?: return
+        sess = null
+        val end = if (outSince > 0) outSince else System.currentTimeMillis()
+        outSince = 0
+        if (end - s.start < 60_000) return   // bir dakikadan kısa oturumlar raporlanmaz
+        val (pct, chg, _) = batteryInfo()
+        val r = GameReport(
+            pkg = s.pkg, start = s.start, end = end,
+            avgFps = if (s.fpsN > 0) s.fpsSum / s.fpsN else -1f,
+            minFps = if (s.fpsN > 0) s.minFps else -1f,
+            batStart = s.batStart, batEnd = pct, charging = s.charging || chg,
+            maxBatTemp = s.maxBat, maxCpuTemp = s.maxCpu
+        )
+        val store = ReportStore(this)
+        val prev = store.forGame(s.pkg).firstOrNull()
+        store.add(r)
+        showReport(r, prev)
+    }
+
+    private fun showReport(r: GameReport, prev: GameReport?) {
+        if (!Settings.canDrawOverlays(this)) return
+        removeReport()
+        val d = density
+        val (sw, sh) = screenSize()
+        val name = Store(this).loadGames().find { it.pkg == r.pkg }?.name ?: r.pkg
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((18 * d).toInt(), (14 * d).toInt(), (18 * d).toInt(), (14 * d).toInt())
+            background = GradientDrawable().apply { setColor(0xF2201F27.toInt()); cornerRadius = 22 * d }
+        }
+        fun line(t: String, size: Float, color: Int, bold: Boolean = false) {
+            box.addView(TextView(this).apply {
+                text = t
+                textSize = size
+                setTextColor(color)
+                if (bold) typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, (2 * d).toInt(), 0, 0)
+            })
+        }
+        val soft = 0xCCFFFFFF.toInt()
+        line("Oyun raporu • $name", 14f, 0xFFFFFFFF.toInt(), true)
+        line("${fmtDur(r.end - r.start)} oynadın", 12f, 0xFFBFA8FF.toInt())
+        line(r.fpsText(), 12f, soft)
+        line(r.batText(), 12f, soft)
+        line(r.tempText(), 12f, soft)
+        compareText(r, prev)?.let { line(it, 11f, 0xFFBFA8FF.toInt()) }
+        box.setOnClickListener { removeReport() }
+
+        val lp = overlayParams(
+            (minOf(sw, sh) * 0.9f).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = (56 * d).toInt()
+        }
+        runCatching {
+            wm.addView(box, lp)
+            reportView = box
+            box.alpha = 0f
+            box.animate().alpha(1f).setDuration(220).start()
+            handler.postDelayed(removeReportRun, 10_000)
+        }
+    }
+
+    private fun removeReport() {
+        handler.removeCallbacks(removeReportRun)
+        reportView?.let { runCatching { wm.removeView(it) } }
+        reportView = null
+    }
+
+    companion object {
+        /** Gerekli izinler verilmişse hizmeti başlatır (zaten çalışıyorsa bir şey olmaz). */
+        fun ensure(ctx: Context) {
+            if (Settings.canDrawOverlays(ctx) && UsageSync.hasPermission(ctx)) {
+                runCatching { ContextCompat.startForegroundService(ctx, Intent(ctx, EdgeService::class.java)) }
+            }
         }
     }
 }

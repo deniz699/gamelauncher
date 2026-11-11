@@ -84,6 +84,7 @@ fun PerformancePage(onClose: () -> Unit) {
     var temp by remember { mutableFloatStateOf(perfBatteryTemp(ctx)) }
     var recheck by remember { mutableIntStateOf(0) }
     var confirm by remember { mutableStateOf<Int?>(null) }
+    var autoT by remember { mutableStateOf(Perf.autoThermal(ctx)) }
 
     BackHandler(onBack = onClose)
 
@@ -100,12 +101,14 @@ fun PerformancePage(onClose: () -> Unit) {
     LaunchedEffect(Unit) {
         while (true) {
             temp = perfBatteryTemp(ctx)
-            if (level > 0 && temp >= 45f && !busy) {
+            if (level > 0 && !busy) {
                 busy = true
-                withContext(Dispatchers.IO) { Perf.restore(ctx) }
-                level = Perf.level(ctx)
-                info = withContext(Dispatchers.IO) { Perf.read() }
-                msg = "Isı 45°C'yi geçti, güvenlik için Dengeli'ye dönüldü."
+                val m = withContext(Dispatchers.IO) { Perf.guard(ctx, temp) }
+                if (m != null) {
+                    level = Perf.level(ctx)
+                    info = withContext(Dispatchers.IO) { Perf.read() }
+                    msg = m
+                }
                 busy = false
             }
             delay(3000)
@@ -126,6 +129,7 @@ fun PerformancePage(onClose: () -> Unit) {
             level = Perf.level(ctx)
             info = withContext(Dispatchers.IO) { Perf.read() }
             busy = false
+            if (level > 0) EdgeService.ensure(ctx)   // sayfa kapansa da ısı koruması çalışsın
         }
     }
 
@@ -144,7 +148,7 @@ fun PerformancePage(onClose: () -> Unit) {
                 )
             },
             confirmButton = {
-                TextButton(onClick = { val x = l; confirm = null; choose(x) }) {
+                TextButton(onClick = { val x = l; confirm = null; Perf.setAcked(ctx); choose(x) }) {
                     Text("Anladım, devam et", color = cs.error)
                 }
             },
@@ -221,6 +225,20 @@ fun PerformancePage(onClose: () -> Unit) {
                             color = if (hot) cs.error else cs.primary
                         )
                     }
+                }
+
+                // ---- Isıya göre otomatik düşürme
+                FlatCard(pad = 16.dp) {
+                    ToggleRow(
+                        "Isıya göre otomatik düşür",
+                        "Pil sıcaklığı 40°C'yi geçince Maksimum, Performans'a iner; 43°C'de Dengeli'ye dönülür. 45°C'de bu kapalı olsa da Dengeli'ye dönülür. " +
+                            "Sayfa kapalıyken de çalışır (kenar paneli izinleri gerekir).",
+                        autoT,
+                        { v ->
+                            autoT = v; Perf.setAutoThermal(ctx, v)
+                            if (v && level > 0) EdgeService.ensure(ctx)
+                        }
+                    )
                 }
 
                 // ---- Uyarı

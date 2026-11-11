@@ -215,7 +215,10 @@ class AppState(private val ctx: Context) {
 
     fun applyEdge() {
         val i = Intent(ctx, EdgeService::class.java)
-        if ((edge || EdgePrefs.hudAny(ctx) || EdgePrefs.autoClean(ctx)) && Settings.canDrawOverlays(ctx) && UsageSync.hasPermission(ctx)) {
+        if ((edge || EdgePrefs.hudAny(ctx) || EdgePrefs.autoClean(ctx) || EdgePrefs.reportOn(ctx) ||
+                (Perf.level(ctx) > 0 && Perf.autoThermal(ctx))) &&
+            Settings.canDrawOverlays(ctx) && UsageSync.hasPermission(ctx)
+        ) {
             runCatching { ContextCompat.startForegroundService(ctx, i) }
         } else {
             ctx.stopService(i)

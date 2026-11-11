@@ -18,6 +18,9 @@ object Root {
     )
     @Volatile private var good: String? = null
 
+    /** Çalışan bir su yolu daha önce bulunduysa true (yeni deneme yapmadan). */
+    val ready: Boolean get() = good != null
+
     /** Son kontrolün neden başarısız olduğu (kullanıcıya gösterilir). */
     @Volatile var diag: String = ""
         private set
@@ -110,6 +113,15 @@ object Perf {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("perf", Context.MODE_PRIVATE)
 
     fun level(ctx: Context): Int = prefs(ctx).getInt("level", 0)
+    fun levelName(l: Int): String = names.getOrElse(l) { names[0] }
+
+    /** Isıya göre otomatik düşürme (varsayılan açık). */
+    fun autoThermal(ctx: Context): Boolean = prefs(ctx).getBoolean("auto_thermal", true)
+    fun setAutoThermal(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean("auto_thermal", v).apply()
+
+    /** Kullanıcı Performans sayfasında uyarıyı en az bir kez onayladı mı? (Kenar panelinden hızlı geçiş için şart.) */
+    fun acked(ctx: Context): Boolean = prefs(ctx).getBoolean("acked", false)
+    fun setAcked(ctx: Context) = prefs(ctx).edit().putBoolean("acked", true).apply()
 
     private fun ls(dir: String): List<String> {
         File(dir).list()?.let { if (it.isNotEmpty()) return it.sorted() }
@@ -285,11 +297,17 @@ object Perf {
     fun apply(ctx: Context, level: Int, info: PerfInfo): String {
         if (level == 0) return restore(ctx)
         val p = prefs(ctx)
+        var inf = info
+        if (p.contains("orig") && p.getInt("level", 0) > 0) {
+            // Seviye değişiyor (ör. Maksimum -> Performans): önce eski haline dön, yoksa governor "performance" kalır
+            restore(ctx)
+            inf = read()
+        }
         if (!p.contains("orig")) {
-            p.edit().putString("orig", origList(info).joinToString("\n") { it.first + "\t" + it.second }).apply()
+            p.edit().putString("orig", origList(inf).joinToString("\n") { it.first + "\t" + it.second }).apply()
         }
         val w = ArrayList<Pair<String, String>>()
-        for (c in info.cpus) {
+        for (c in inf.cpus) {
             if (c.hwMax <= 0) continue
             w += "${c.dir}/scaling_max_freq" to c.hwMax.toString()   // önce üst sınırı aç
             if (level == 2 && "performance" in c.govs) w += "${c.dir}/scaling_governor" to "performance"
@@ -297,7 +315,7 @@ object Perf {
             w += "${c.dir}/scaling_min_freq" to minT.toString()
         }
         var note = ""
-        info.gpu?.let { g ->
+        inf.gpu?.let { g ->
             when (g.backend) {
                 "nodes" -> {
                     // Değerler cihazın kendi listesinden seçilir, birim varsayılmaz
@@ -322,6 +340,35 @@ object Perf {
                 (if (fail == 0) "${names[level]} uygulandı." else "${names[level]} kısmen uygulandı ($fail değer yazılamadı).") + note
             }
         }
+    }
+
+    /**
+     * Isı yükselince seviyeyi düşürür; bir şey yaptıysa kullanıcıya gösterilecek mesajı döner.
+     * 45°C: her durumda Dengeli. Otomatik düşürme açıksa: 43°C Dengeli, 40°C'de Maksimum -> Performans.
+     * Arka plan iş parçacığında çağır.
+     */
+    fun guard(ctx: Context, tempC: Float): String? {
+        val lv = level(ctx)
+        if (lv == 0) return null
+        val auto = autoThermal(ctx)
+        val target = when {
+            tempC >= 45f -> 0
+            auto && tempC >= 43f -> 0
+            auto && tempC >= 40f && lv == 2 -> 1
+            else -> return null
+        }
+        if (!Root.ready && !Root.available()) return null
+        apply(ctx, target, read())
+        val t = "${tempC.toInt()}°C"
+        return if (target == 0) "Isı $t: Dengeli'ye dönüldü." else "Isı $t: Performans seviyesine düşürüldü."
+    }
+
+    /** Kenar panelinden hızlı seviye değişimi. Arka plan iş parçacığında çağır; gösterilecek mesajı döner. */
+    fun quickSet(ctx: Context, target: Int): String {
+        if (target > 0 && !acked(ctx)) return "Önce Performans sayfasından bir seviye seçip uyarıyı onayla."
+        if (target > 0 && perfBatteryTemp(ctx) >= 42f) return "Telefon zaten sıcak, yükseltme yapılmadı."
+        if (!Root.ready && !Root.available()) return "Root yok."
+        return apply(ctx, target, read())
     }
 
     fun restore(ctx: Context): String {

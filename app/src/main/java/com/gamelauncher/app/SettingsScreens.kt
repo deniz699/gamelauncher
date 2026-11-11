@@ -245,6 +245,7 @@ private fun EdgePage(s: AppState) {
         }
         FlatCard { EdgePanelSettings() }
         HudSection(s)
+        ReportSection(s)
     }
 }
 
@@ -292,6 +293,27 @@ private fun HudSection(s: AppState) {
         )
         Text("Konum", Modifier.padding(top = 18.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
         SegmentedChoice(listOf("Üst sol", "Üst orta", "Üst sağ"), pos) { pos = it; EdgePrefs.setHudPos(ctx, it) }
+    }
+}
+
+@Composable
+private fun ReportSection(s: AppState) {
+    val ctx = LocalContext.current
+    var on by remember { mutableStateOf(EdgePrefs.reportOn(ctx)) }
+    FlatCard {
+        ToggleRow(
+            "Oyun raporu",
+            "Oyun bitince ekranda kısa bir özet çıkar: süre, FPS, pil düşüşü, en yüksek ısı ve önceki oturumla karşılaştırma. " +
+                "Raporlar oyunun istatistik sayfasında saklanır. FPS'in ölçülebilmesi için root gerekir; ölçülemezse FPS yazılmaz.",
+            on,
+            { v ->
+                if (v && !Settings.canDrawOverlays(ctx)) {
+                    ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName)))
+                } else {
+                    on = v; EdgePrefs.setReportOn(ctx, v); s.applyEdge()
+                }
+            }
+        )
     }
 }
 

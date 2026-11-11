@@ -209,6 +209,8 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
                     SummaryRow("Dönem toplamı", fmtDur(total))
                     if (mx != null && values[mx] > 0) SummaryRow("En yoğun", "${period.tips[mx]} • ${fmtDur(values[mx])}")
                 }
+                Spacer(Modifier.height(12.dp))
+                ReportsCard(pkg)
                 Text(
                     "Geçmiş veriler, uygulamanın kayıt tutmaya başladığı günden itibaren görünür.",
                     Modifier.padding(top = 12.dp), fontSize = 11.sp, color = cs.onSurfaceVariant
