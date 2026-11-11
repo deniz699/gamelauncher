@@ -9,7 +9,14 @@ import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -68,7 +75,12 @@ private fun maxFreqMhz(): Int? {
     return (m / 1000).toInt()
 }
 
-private fun rows(ctx: Context): List<Pair<String, List<Pair<String, String>>>> {
+/** Bir bilgi satırı. [frac] doluysa çubuk olarak çizilir (0..1); [temp] true ise renk sıcaklığa göre değişir. */
+private class Item(val k: String, val v: String, val frac: Float? = null, val temp: Boolean = false)
+
+private fun tempFrac(c: Float) = (c / 100f).coerceIn(0f, 1f)
+
+private fun rows(ctx: Context): List<Pair<String, List<Item>>> {
     val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     val mi = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
     val st = StatFs(Environment.getDataDirectory().path)
@@ -86,27 +98,65 @@ private fun rows(ctx: Context): List<Pair<String, List<Pair<String, String>>>> {
 
     return listOf(
         "Cihaz" to listOf(
-            "Model" to "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+            Item("Model", "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}")
         ),
         "İşlemci" to listOf(
-            "İşlemci (çip)" to soc.ifBlank { Build.HARDWARE },
-            "CPU" to "${Runtime.getRuntime().availableProcessors()} çekirdek • ${Build.SUPPORTED_ABIS.firstOrNull() ?: "?"}" +
-                (mhz?.let { " • $it MHz" } ?: ""),
-            "İşlemci sıcaklığı" to (ct?.let { String.format(Locale.US, "%.1f °C", it) } ?: "Okunamadı (Android izin vermiyor)")
+            Item("İşlemci (çip)", soc.ifBlank { Build.HARDWARE }),
+            Item(
+                "CPU",
+                "${Runtime.getRuntime().availableProcessors()} çekirdek • ${Build.SUPPORTED_ABIS.firstOrNull() ?: "?"}" +
+                    (mhz?.let { " • $it MHz" } ?: "")
+            ),
+            if (ct != null) Item("İşlemci sıcaklığı", String.format(Locale.US, "%.1f °C", ct), tempFrac(ct), true)
+            else Item("İşlemci sıcaklığı", "Okunamadı (Android izin vermiyor)")
         ),
         "Bellek" to listOf(
-            "RAM" to "${gb(mi.totalMem)} (boş: ${gb(mi.availMem)})",
-            "Depolama" to "${gb(total)} (boş: ${gb(free)})"
+            Item(
+                "RAM", "${gb(mi.totalMem - mi.availMem)} / ${gb(mi.totalMem)}",
+                ((mi.totalMem - mi.availMem).toFloat() / mi.totalMem).coerceIn(0f, 1f)
+            ),
+            Item(
+                "Depolama", "${gb(total - free)} / ${gb(total)}",
+                ((total - free).toFloat() / total).coerceIn(0f, 1f)
+            )
         ),
         "Sistem" to listOf(
-            "Android sürümü" to Build.VERSION.RELEASE,
-            "SDK sürümü" to Build.VERSION.SDK_INT.toString()
+            Item("Android sürümü", Build.VERSION.RELEASE),
+            Item("SDK sürümü", Build.VERSION.SDK_INT.toString())
         ),
         "Batarya" to listOf(
-            "Sıcaklık" to (if (bt != Int.MIN_VALUE) String.format(Locale.US, "%.1f °C", bt / 10f) else "Okunamadı"),
-            "Şarj" to (if (lv >= 0) "%${lv * 100 / sc}" else "?")
+            if (bt != Int.MIN_VALUE) Item("Sıcaklık", String.format(Locale.US, "%.1f °C", bt / 10f), tempFrac(bt / 10f), true)
+            else Item("Sıcaklık", "Okunamadı"),
+            if (lv >= 0) Item("Şarj", "%${lv * 100 / sc}", (lv.toFloat() / sc).coerceIn(0f, 1f))
+            else Item("Şarj", "?")
         )
     )
+}
+
+/** Çubuk: yazılar çubuğun üstünde durur (solda ad, sağda değer). */
+@Composable
+private fun StatBar(label: String, value: String, frac: Float, temp: Boolean, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val c = frac * 100f
+    val fill = if (temp) {
+        when {
+            c < 40f -> Color(0xFF4CAF50)
+            c < 50f -> Color(0xFFFFB300)
+            else -> Color(0xFFE53935)
+        }
+    } else cs.primary
+    val shape = RoundedCornerShape(12.dp)
+    Box(modifier.fillMaxWidth().height(40.dp).clip(shape).background(cs.surfaceContainerHighest)) {
+        Box(Modifier.fillMaxHeight().fillMaxWidth(frac.coerceAtLeast(0.02f)).background(fill.copy(alpha = 0.55f)))
+        Row(
+            Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, color = cs.onSurface, fontWeight = FontWeight.Medium)
+            Text(value, color = cs.onSurface, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
+        }
+    }
 }
 
 @Composable
@@ -134,10 +184,14 @@ fun DevicePage(onClose: () -> Unit) {
                 data.forEach { (title, items) ->
                     FlatCard {
                         Text(title, style = MaterialTheme.typography.titleMedium, color = cs.primary)
-                        items.forEach { (k, v) ->
-                            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(k, Modifier.padding(end = 12.dp), color = cs.onSurfaceVariant)
-                                Text(v, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
+                        items.forEach { it ->
+                            if (it.frac != null) {
+                                StatBar(it.k, it.v, it.frac, it.temp, Modifier.padding(top = 12.dp))
+                            } else {
+                                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(it.k, Modifier.padding(end = 12.dp), color = cs.onSurfaceVariant)
+                                    Text(it.v, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
+                                }
                             }
                         }
                     }
