@@ -485,12 +485,6 @@ class EdgeService : Service() {
         list.addView(hudToggle("FPS", { EdgePrefs.hudFps(this) }, { EdgePrefs.setHudFps(this, it) }), tl)
         list.addView(hudToggle("Pil", { EdgePrefs.hudBat(this) }, { EdgePrefs.setHudBat(this, it) }), tl)
         list.addView(hudToggle("CPU", { EdgePrefs.hudCpu(this) }, { EdgePrefs.setHudCpu(this, it) }), tl)
-        // Hızlı eylemler: güç seviyesi, RAM temizle, ekran kaydı
-        list.addView(actionBtn(perfLabel(Perf.level(this))) { tv -> cyclePerf(tv) }, tl)
-        list.addView(actionBtn("RAM") {
-            Booster.clean(this, setOfNotNull(fg)) { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
-        }, tl)
-        list.addView(actionBtn(if (ScreenRecordService.recording) "■ Dur" else "● Kayıt") { toggleRecord() }, tl)
         list.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (1 * d).toInt()).apply {
                 setMargins((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (4 * d).toInt())
