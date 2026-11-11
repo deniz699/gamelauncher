@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -248,7 +249,12 @@ fun PerformancePage(onClose: () -> Unit) {
                         Text("Dikkat", style = MaterialTheme.typography.titleMedium, color = cs.onErrorContainer)
                     }
                     Text(
-                        "Bu ayarlar donanımı sınırlarına yakın çalıştırır. Telefon kendini koruyan sistemlere sahiptir ama risk sana aittir.",
+                        buildAnnotatedString {
+                            append("Bu ayarlar donanımı sınırlarına yakın çalıştırır. Oluşacak herhangi bir riskte sorumluluk size aittir.\n")
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
+                                append("Telefonunuzun yeniden başlamasına neden olabilir")
+                            }
+                        },
                         Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = cs.onErrorContainer
                     )
                     WarnLine("Aşırı ısınma: ", "Uzun süre yüksek hızda kalmak telefonu dokunulamayacak kadar ısıtabilir.")
