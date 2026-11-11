@@ -231,8 +231,7 @@ fun PerformancePage(onClose: () -> Unit) {
                 FlatCard(pad = 16.dp) {
                     ToggleRow(
                         "Isıya göre otomatik düşür",
-                        "Pil sıcaklığı 40°C'yi geçince Maksimum, Performans'a iner; 43°C'de Dengeli'ye dönülür. 45°C'de bu kapalı olsa da Dengeli'ye dönülür. " +
-                            "Sayfa kapalıyken de çalışır (kenar paneli izinleri gerekir).",
+                        "Pil sıcaklığı 40°C'yi geçince Maksimum, Performans'a iner; 43°C'de Dengeli'ye dönülür. 45°C'de bu kapalı olsa da Dengeli'ye dönülür.",
                         autoT,
                         { v ->
                             autoT = v; Perf.setAutoThermal(ctx, v)
