@@ -479,7 +479,7 @@ private fun UpdatesPage() {
             is UpState.Idle -> "Sürüm ${cur.name}"
             is UpState.Checking -> "Güncellemeler kontrol ediliyor…"
             is UpState.UpToDate -> "Uygulamanız güncel"
-            is UpState.Available -> "Yeni sürüm var: 1.0.${x.r.build}"
+            is UpState.Available -> "Yeni sürüm var"
             is UpState.Downloading -> "Güncelleme indiriliyor…"
             is UpState.Ready -> "İndirme tamamlandı"
             is UpState.NeedsPermission -> "Kurulum izni gerekli"
@@ -614,10 +614,11 @@ private fun HelpPage() {
 
 @Composable
 private fun AboutPage() {
+    val cur = remember { Updater.current(LocalContext.current) }
     val cs = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Game Launcher", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Sürüm 1.0.0", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.titleMedium, color = cs.primary)
+        Text("Sürüm ${cur.name}", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.titleMedium, color = cs.primary)
         Text("2026", Modifier.padding(top = 32.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
     }
 }
