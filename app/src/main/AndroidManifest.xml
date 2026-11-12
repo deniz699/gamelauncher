@@ -4,6 +4,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Ağ kontrolü: Wi-Fi ve 4G/5G'yi ayrı ayrı ölçmek için (bağlantıyı değiştirmez) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+
     <!-- Yeni sürüm bildirimi (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

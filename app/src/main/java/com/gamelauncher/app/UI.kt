@@ -90,6 +90,7 @@ fun App(s: AppState) {
     var showAppearance by remember { mutableStateOf(false) }
     var showDevice by remember { mutableStateOf(false) }
     var showPerf by remember { mutableStateOf(false) }
+    var showNet by remember { mutableStateOf(false) }
     var statsGame by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<String?>(null) }
     var searching by remember { mutableStateOf(false) }
@@ -153,7 +154,7 @@ fun App(s: AppState) {
                     0 -> GameGrid(
                         s, visible(s.sortedGames()),
                         if (filtering) "Eşleşen oyun yok." else "Oyun bulunamadı. Telefondaki oyunlar otomatik eklenir.",
-                        header = { HomeExtras(s, onStats = { tab = 2 }, onDevice = { showDevice = true }, onPerf = { showPerf = true }) },
+                        header = { HomeExtras(s, onStats = { tab = 2 }, onDevice = { showDevice = true }, onPerf = { showPerf = true }, onNet = { showNet = true }) },
                         showHeader = !filtering,
                         onInfo = { statsGame = it }
                     ) { selected = it }
@@ -187,6 +188,7 @@ fun App(s: AppState) {
         if (showSettings) SettingsPage(s) { showSettings = false }
         if (showDevice) DevicePage { showDevice = false }
         if (showPerf) PerformancePage { showPerf = false }
+        if (showNet) NetworkPage { showNet = false }
         statsGame?.let { GameStatsPage(s, it) { statsGame = null } }
     }
 
@@ -420,9 +422,11 @@ private fun UsageBanner() {
 
 /** Ana sayfanın üstü: bugünkü süre + hızlı eylemler, kaldığın yer şeridi, haftalık özet. */
 @Composable
-private fun HomeExtras(s: AppState, onStats: () -> Unit, onDevice: () -> Unit, onPerf: () -> Unit) {
+private fun HomeExtras(s: AppState, onStats: () -> Unit, onDevice: () -> Unit, onPerf: () -> Unit, onNet: () -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         HomeSummary(s, onStats, onDevice, onPerf)
+        Spacer(Modifier.height(10.dp))
+        ActionTile(Icons.Default.NetworkCheck, "Ağ kontrolü ve hız testi", Modifier.height(52.dp), onNet)
         RecentStrip(s)
         WeekCard(s)
     }
