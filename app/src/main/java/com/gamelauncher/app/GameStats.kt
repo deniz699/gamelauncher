@@ -1,6 +1,14 @@
 package com.gamelauncher.app
 
+import android.app.usage.StorageStatsManager
+import android.content.Context
+import android.os.Process
+import android.os.storage.StorageManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -182,6 +190,11 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
                     Column {
                         Text("Toplam süre", color = cs.onSurfaceVariant, fontSize = 12.sp)
                         Text(fmtDur(playedMs(s.sessions, pkg, Range.ALL)), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        val sz = rememberGameSize(pkg)
+                        Text(
+                            "Oyun boyutu: ${sz?.let { fmtSize(it.total) } ?: "…"}",
+                            Modifier.padding(top = 4.dp), color = cs.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.Medium
+                        )
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -241,5 +254,71 @@ private fun SummaryRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
         Text(label, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, fontWeight = FontWeight.Medium)
+    }
+}
+
+
+// ---------------------------------------------------------------- Oyun boyutu
+
+private class GameSize(val app: Long, val data: Long, val cache: Long, val obb: Long, val exact: Boolean) {
+    val total get() = app + data + cache + obb
+}
+
+private fun fmtSize(b: Long): String = when {
+    b >= 1L shl 30 -> "%.2f GB".format(b / 1073741824.0)
+    b >= 1L shl 20 -> "%.0f MB".format(b / 1048576.0)
+    b >= 1L shl 10 -> "%.0f KB".format(b / 1024.0)
+    else -> "$b B"
+}
+
+/** Kullanım erişimi varsa uygulama + veri + önbellek; yoksa yalnızca APK dosyalarının boyutu. */
+private fun loadGameSize(ctx: Context, pkg: String): GameSize? {
+    val ai = runCatching { ctx.packageManager.getApplicationInfo(pkg, 0) }.getOrNull() ?: return null
+    val apk = (listOfNotNull(ai.sourceDir) + (ai.splitSourceDirs?.toList() ?: emptyList())).sumOf { File(it).length() }
+    // Büyük oyunlar ek verisini OBB klasöründe tutar; Android erişimi kısıtlıyorsa 0 kalır
+    val obb = runCatching {
+        File("/storage/emulated/0/Android/obb/$pkg").walkTopDown().filter { it.isFile }.sumOf { it.length() }
+    }.getOrDefault(0L)
+    val st = runCatching {
+        ctx.getSystemService(StorageStatsManager::class.java)
+            .queryStatsForPackage(StorageManager.UUID_DEFAULT, pkg, Process.myUserHandle())
+    }.getOrNull()
+    return if (st != null) GameSize(st.appBytes, st.dataBytes - st.cacheBytes, st.cacheBytes, obb, true)
+    else GameSize(apk, 0L, 0L, obb, false)
+}
+
+@Composable
+private fun rememberGameSize(pkg: String): GameSize? {
+    val ctx = LocalContext.current
+    val size by produceState<GameSize?>(null, pkg) {
+        value = withContext(Dispatchers.IO) { loadGameSize(ctx, pkg) }
+    }
+    return size
+}
+
+@Composable
+fun GameSizeCard(pkg: String) {
+    val cs = MaterialTheme.colorScheme
+    val size = rememberGameSize(pkg)
+    FlatCard(pad = 16.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Oyun boyutu", Modifier.weight(1f), color = cs.onSurfaceVariant)
+            Text(size?.let { fmtSize(it.total) } ?: "…", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        size?.let { z ->
+            Spacer(Modifier.height(4.dp))
+            SummaryRow(if (z.exact) "Uygulama" else "APK dosyaları", fmtSize(z.app))
+            if (z.exact) {
+                SummaryRow("Oyun verisi", fmtSize(z.data))
+                SummaryRow("Önbellek", fmtSize(z.cache))
+            }
+            if (z.obb > 0) SummaryRow("Ek veri (OBB)", fmtSize(z.obb))
+            if (!z.exact) {
+                Text(
+                    "Veri ve önbellek boyutu için \"Kullanım erişimi\" izni gerekli.",
+                    Modifier.padding(top = 6.dp), fontSize = 11.sp, color = cs.onSurfaceVariant
+                )
+            }
+        }
     }
 }
