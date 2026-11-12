@@ -577,6 +577,22 @@ private val faq = listOf(
         "Açılır pencere için cihazın serbest pencere desteği olması gerekir. Desteklemeyen cihazlarda uygulama tam ekran açılır. Kısayola uzun basarsan uygulama normal açılır.",
     "Tema ve duvar kağıdını nerede değiştiririm?" to
         "Ana sayfada üstteki telefon simgesinin solundaki kalem simgesine dokun. Tema, vurgu rengi, duvar kağıdı ve bulanıklık orada.",
+    "Telefon ve Ağ Testi nerede?" to
+        "Ana sayfada alt çubuğun en sağındaki \"Telefon ve Ağ Testi\" sekmesine dokun. İçinde iki büyük düğme var: Test Kiti ile Ağ Kontrolü ve Hız Testi.",
+    "İnternet hız testi nasıl çalışır?" to
+        "Ağ Kontrolü ve Hız Testi > Hız sekmesinde başlat. Önce ping ve dalgalanmayı, sonra 8'er saniye indirme ve yükleme hızını (Mbps) ölçer. Test o an kullandığın ağ üzerinden yapılır ve yüzlerce MB veri harcayabilir; mobil veride dikkat et.",
+    "Ping ve dalgalanma ne demek?" to
+        "Ping, verinin gidip gelme süresidir (ms); oyunda ne kadar düşükse o kadar iyi. Dalgalanma, bu sürenin ne kadar oynadığını gösterir; yüksekse ping sıçrar ve oyun takılır. Cevapsız, hiç dönmeyen paket sayısıdır.",
+    "Wi-Fi mi 4G/5G mi oynamak için daha iyi?" to
+        "Ağ Kontrolü'nde Wi-Fi/4G sekmesi ikisini aynı DNS sunucusuna aynı anda 10'ar sorguyla ölçüp karşılaştırır ve hangisinin daha iyi olduğunu yazar. Uygulama bağlantını değiştirmez, yalnızca ölçer. Mobil veri kapalıysa ya da Wi-Fi'a bağlı değilsen o taraf ölçülemez.",
+    "Bölge ölçümü neyi gösterir?" to
+        "Bölge sekmesi büyük bulut sağlayıcısının Frankfurt, Tokyo, ABD gibi bölgelerine bağlantı süresini ölçer ve en yakını gösterir. Bunlar oyunun kendi sunucuları değildir; oyunda sunucu seçeneği varsa en düşük süreli bölgeye yakın olanı seçmek için yol göstericidir.",
+    "Test Kiti ne işe yarar?" to
+        "Telefonun donanımını test eder. Dokunma sekmesi ekranın her yerinin dokunmayı algılayıp algılamadığını, dokunma hızını (Hz) ve aynı anda kaç parmağı okuduğunu gösterir. Ekran sekmesi ölü piksel ve leke için ekranı tek renge boyar. Kumanda sekmesi bağlı gamepad'in tuşlarını ve çubuklarını canlı gösterir. Sağ üstten ses ve titreşimi kapatabilirsin.",
+    "Kumanda sekmesi kumandamı görmüyor" to
+        "Kumandayı Bluetooth ya da USB ile telefona bağla, sonra Kumanda sekmesi açıkken herhangi bir tuşuna bas. Kumanda telefonda tanınmıyorsa önce telefonun Bluetooth ayarlarından eşleştir.",
+    "Oyun boyutunu nerede görürüm?" to
+        "Oyunun istatistik sayfasında \"Toplam süre\" altında, oyuna dokununca açılan pencerede de ayrıntılı kart olarak. Veri ve önbellek dahil gerçek boyut için \"Kullanım erişimi\" izni gerekir; izin yoksa yalnızca APK boyutu gösterilir.",
     "Uygulamayı nasıl güncellerim?" to
         "Ayarlar > Güncellemeler'e gir ve \"Güncellemeyi kontrol et\"e dokun. Yeni sürüm varsa indirip kurabilirsin."
 )
