@@ -23,6 +23,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Test Kiti'nin Kumanda sekmesi açıkken gamepad olaylarını oraya yönlendirir
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
+        if (ControllerInput.onKey(event)) true else super.dispatchKeyEvent(event)
+
+    override fun dispatchGenericMotionEvent(ev: android.view.MotionEvent): Boolean =
+        if (ControllerInput.onMotion(ev)) true else super.dispatchGenericMotionEvent(ev)
+
     override fun onResume() {
         super.onResume()
         state.sync()

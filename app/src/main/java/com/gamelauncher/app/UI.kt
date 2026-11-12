@@ -91,6 +91,8 @@ fun App(s: AppState) {
     var showDevice by remember { mutableStateOf(false) }
     var showPerf by remember { mutableStateOf(false) }
     var showNet by remember { mutableStateOf(false) }
+    var showTools by remember { mutableStateOf(false) }
+    var showKit by remember { mutableStateOf(false) }
     var statsGame by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<String?>(null) }
     var searching by remember { mutableStateOf(false) }
@@ -127,7 +129,8 @@ fun App(s: AppState) {
     val tabs: List<Pair<String, ImageVector>> = listOf(
         "Tümü" to Icons.Default.SportsEsports,
         "Favoriler" to Icons.Default.Favorite,
-        "İstatistik" to Icons.Default.BarChart
+        "İstatistik" to Icons.Default.BarChart,
+        "Telefon ve Ağ Testi" to Icons.Default.Build
     )
 
     val activeGroup = group?.takeIf { it in s.groups }
@@ -154,7 +157,7 @@ fun App(s: AppState) {
                     0 -> GameGrid(
                         s, visible(s.sortedGames()),
                         if (filtering) "Eşleşen oyun yok." else "Oyun bulunamadı. Telefondaki oyunlar otomatik eklenir.",
-                        header = { HomeExtras(s, onStats = { tab = 2 }, onDevice = { showDevice = true }, onPerf = { showPerf = true }, onNet = { showNet = true }) },
+                        header = { HomeExtras(s, onStats = { tab = 2 }, onDevice = { showDevice = true }, onPerf = { showPerf = true }) },
                         showHeader = !filtering,
                         onInfo = { statsGame = it }
                     ) { selected = it }
@@ -179,7 +182,7 @@ fun App(s: AppState) {
         FlatBottomNav(
             items = tabs,
             selected = tab,
-            onSelect = { tab = it },
+            onSelect = { if (it == 3) showTools = true else tab = it },
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .widthIn(max = 420.dp).fillMaxWidth().height(64.dp)
@@ -188,6 +191,8 @@ fun App(s: AppState) {
         if (showSettings) SettingsPage(s) { showSettings = false }
         if (showDevice) DevicePage { showDevice = false }
         if (showPerf) PerformancePage { showPerf = false }
+        if (showTools) ToolsPage({ showTools = false }, { showKit = true }, { showNet = true })
+        if (showKit) TestKitPage { showKit = false }
         if (showNet) NetworkPage { showNet = false }
         statsGame?.let { GameStatsPage(s, it) { statsGame = null } }
     }
@@ -422,11 +427,9 @@ private fun UsageBanner() {
 
 /** Ana sayfanın üstü: bugünkü süre + hızlı eylemler, kaldığın yer şeridi, haftalık özet. */
 @Composable
-private fun HomeExtras(s: AppState, onStats: () -> Unit, onDevice: () -> Unit, onPerf: () -> Unit, onNet: () -> Unit) {
+private fun HomeExtras(s: AppState, onStats: () -> Unit, onDevice: () -> Unit, onPerf: () -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         HomeSummary(s, onStats, onDevice, onPerf)
-        Spacer(Modifier.height(10.dp))
-        ActionTile(Icons.Default.NetworkCheck, "Ağ kontrolü ve hız testi", Modifier.height(52.dp), onNet)
         RecentStrip(s)
         WeekCard(s)
     }
