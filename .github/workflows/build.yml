@@ -47,8 +47,11 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
           VERSION="$APP_VERSION"
+          # Yenilikler: son commit mesajı (null/boş görünmesin diye yedek metinle)
+          NOTES=$(git log -1 --pretty=%B | sed '/^\s*$/d')
+          [ -z "$NOTES" ] && NOTES="Hata düzeltmeleri ve iyileştirmeler."
           gh release create "v${VERSION}-${GITHUB_RUN_NUMBER}" GameLauncher.apk \
             --repo "$RELEASES_REPO" \
             --title "Game Launcher ${VERSION}" \
-            --notes "" \
+            --notes "$NOTES" \
             --latest
