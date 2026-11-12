@@ -237,7 +237,7 @@ fun FlatBottomNav(
     ) {
         items.forEachIndexed { i, (label, icon) ->
             val sel = i == selected
-            val w by animateFloatAsState(if (sel) 2.2f else 1f, spring(dampingRatio = 0.8f, stiffness = 400f), label = "navW")
+            val w by animateFloatAsState(if (sel) maxOf(2.2f, 0.8f + label.length * 0.14f) else 1f, spring(dampingRatio = 0.8f, stiffness = 400f), label = "navW")
             val bg by animateColorAsState(if (sel) cs.primary else Color.Transparent, tween(200), label = "navBg")
             val fg by animateColorAsState(if (sel) cs.onPrimary else cs.onSurfaceVariant, tween(200), label = "navFg")
             val iconPop by animateFloatAsState(if (sel) 1.15f else 1f, spring(dampingRatio = 0.35f, stiffness = 300f), label = "navPop")
@@ -250,7 +250,7 @@ fun FlatBottomNav(
                 Icon(icon, label, Modifier.graphicsLayer { scaleX = iconPop; scaleY = iconPop }, tint = fg)
                 if (sel) {
                     Spacer(Modifier.width(8.dp))
-                    Text(label, color = fg, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1)
+                    Text(label, color = fg, fontWeight = FontWeight.SemiBold, fontSize = if (label.length > 14) 13.sp else 14.sp, maxLines = 1)
                 }
             }
         }

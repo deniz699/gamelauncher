@@ -97,21 +97,15 @@ object ControllerInput {
 
 // ------------------------------------------------------------------ Telefon ve Ağ Testi (ana sayfa)
 
+/** Alt bardaki "Telefon ve Ağ Testi" sekmesinin içeriği: ortada iki büyük düğme. */
 @Composable
-fun ToolsPage(onClose: () -> Unit, onKit: () -> Unit, onNet: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    BackHandler(onBack = onClose)
-    Surface(Modifier.fillMaxSize(), color = cs.background) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            ScreenTopBar("Telefon ve Ağ Testi", onClose)
-            Column(
-                Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
-            ) {
-                BigTile(Icons.Default.TouchApp, "Test Kiti", "Dokunma, ekran ve kumanda testi", onKit)
-                BigTile(Icons.Default.NetworkCheck, "Ağ Kontrolü ve Hız Testi", "Ping, indirme, yükleme, Wi-Fi mi 4G/5G mi", onNet)
-            }
-        }
+fun ToolsTab(onKit: () -> Unit, onNet: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, bottom = 110.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+    ) {
+        BigTile(Icons.Default.TouchApp, "Test Kiti", "Dokunma, ekran ve kumanda testi", onKit)
+        BigTile(Icons.Default.NetworkCheck, "Ağ Kontrolü ve Hız Testi", "Ping, indirme, yükleme, Wi-Fi mi 4G/5G mi", onNet)
     }
 }
 

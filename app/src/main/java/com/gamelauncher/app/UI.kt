@@ -91,7 +91,6 @@ fun App(s: AppState) {
     var showDevice by remember { mutableStateOf(false) }
     var showPerf by remember { mutableStateOf(false) }
     var showNet by remember { mutableStateOf(false) }
-    var showTools by remember { mutableStateOf(false) }
     var showKit by remember { mutableStateOf(false) }
     var statsGame by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<String?>(null) }
@@ -118,7 +117,7 @@ fun App(s: AppState) {
     BackHandler(enabled = tab != 0) { tab = 0 }
     BackHandler(enabled = searching) { searching = false; query = "" }
     // Sağa/sola kaydırarak sayfa değiştirme (alt çubukla senkron)
-    val pagerState = rememberPagerState { 3 }
+    val pagerState = rememberPagerState { 4 }
     LaunchedEffect(tab) {
         if (pagerState.currentPage != tab) pagerState.animateScrollToPage(tab)
     }
@@ -148,7 +147,7 @@ fun App(s: AppState) {
                 onAppearance = { showAppearance = true },
                 onSettings = { showSettings = true }
             )
-            if (tab != 2) {
+            if (tab < 2) {
                 FilterRow(s, activeGroup, { group = it }, { showNewGroup = true }, { delGroup = it })
             }
             if (!s.hasUsage) UsageBanner()
@@ -166,12 +165,13 @@ fun App(s: AppState) {
                         if (filtering) "Eşleşen oyun yok." else "Favori oyun yok. Kalbe dokunarak ekle.",
                         onInfo = { statsGame = it }
                     ) { selected = it }
-                    else -> StatsTab(s) { statsGame = it }
+                    2 -> StatsTab(s) { statsGame = it }
+                    else -> ToolsTab(onKit = { showKit = true }, onNet = { showNet = true })
                 }
             }
         }
 
-        if (tab != 2) {
+        if (tab < 2) {
             IconBox(
                 Icons.Default.Add, "Oyun ekle", { showAdd = true },
                 Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = 88.dp),
@@ -182,7 +182,7 @@ fun App(s: AppState) {
         FlatBottomNav(
             items = tabs,
             selected = tab,
-            onSelect = { if (it == 3) showTools = true else tab = it },
+            onSelect = { tab = it },
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .widthIn(max = 420.dp).fillMaxWidth().height(64.dp)
@@ -191,7 +191,6 @@ fun App(s: AppState) {
         if (showSettings) SettingsPage(s) { showSettings = false }
         if (showDevice) DevicePage { showDevice = false }
         if (showPerf) PerformancePage { showPerf = false }
-        if (showTools) ToolsPage({ showTools = false }, { showKit = true }, { showNet = true })
         if (showKit) TestKitPage { showKit = false }
         if (showNet) NetworkPage { showNet = false }
         statsGame?.let { GameStatsPage(s, it) { statsGame = null } }
@@ -229,13 +228,14 @@ private fun HomeHeader(
     onSearch: () -> Unit, onAppearance: () -> Unit, onSettings: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
-    val title = when (tab) { 0 -> "Oyunlarım"; 1 -> "Favoriler"; else -> "İstatistik" }
+    val title = when (tab) { 0 -> "Oyunlarım"; 1 -> "Favoriler"; 2 -> "İstatistik"; else -> "Telefon ve Ağ Testi" }
     val sub = when (tab) {
         0 -> "${s.games.size} oyun"
         1 -> "${s.games.count { it.favorite }} oyun"
-        else -> "Oynama süreleri"
+        2 -> "Oynama süreleri"
+        else -> "Test araçları"
     }
-    val expanded = searching && tab != 2
+    val expanded = searching && tab < 2
     BoxWithConstraints(
         Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)
     ) {
@@ -251,7 +251,7 @@ private fun HomeHeader(
                 Text(title, style = MaterialTheme.typography.headlineLarge, maxLines = 1)
                 Text(sub, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, maxLines = 1)
             }
-            if (tab != 2) {
+            if (tab < 2) {
                 SearchPill(sw, expanded, query, onQuery, onSearch)
                 Spacer(Modifier.width(8.dp))
             }
