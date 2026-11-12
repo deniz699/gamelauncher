@@ -8,6 +8,9 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -94,6 +97,9 @@ private class FormState {
     var msg by mutableStateOf("")
     var token by mutableStateOf("")
     var error by mutableStateOf<String?>(null)
+    var titleErr by mutableStateOf<String?>(null)
+    var emailErr by mutableStateOf<String?>(null)
+    var msgErr by mutableStateOf<String?>(null)
     var captchaKey by mutableIntStateOf(0)
 }
 
@@ -107,10 +113,16 @@ fun ContactPage() {
     BackHandler(enabled = phase == Phase.Sending) { }   // gönderirken geri tuşu yok sayılır
 
     fun submit() {
+        f.titleErr = if (f.title.isBlank()) "Başlık boş olamaz." else null
+        f.emailErr = when {
+            f.email.isBlank() -> "E-posta adresini yaz."
+            !Patterns.EMAIL_ADDRESS.matcher(f.email.trim()).matches() -> "Geçerli bir e-posta adresi gir. (örn. isim@site.com)"
+            else -> null
+        }
+        f.msgErr = if (f.msg.isBlank()) "Mesaj boş olamaz." else null
         val problem = when {
             Contact.ENDPOINT.isBlank() -> "İletişim henüz ayarlanmadı."
-            f.title.isBlank() || f.msg.isBlank() -> "Başlık ve mesaj boş olamaz."
-            !Patterns.EMAIL_ADDRESS.matcher(f.email.trim()).matches() -> "Geçerli bir e-posta gir."
+            f.titleErr != null || f.emailErr != null || f.msgErr != null -> "Lütfen kırmızı alanları düzelt."
             f.token.isBlank() -> "Lütfen aşağıdaki doğrulamayı tamamla."
             else -> null
         }
@@ -185,19 +197,28 @@ private fun ContactForm(f: FormState, onSend: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Mesaj gönder", style = MaterialTheme.typography.titleLarge)
-        OutlinedTextField(
-            f.title, { f.title = it.take(100) }, Modifier.fillMaxWidth(),
-            label = { Text("Başlık") }, singleLine = true
-        )
-        OutlinedTextField(
-            f.email, { f.email = it.take(120) }, Modifier.fillMaxWidth(),
-            label = { Text("E-posta") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
-        )
-        OutlinedTextField(
-            f.msg, { f.msg = it.take(2000) }, Modifier.fillMaxWidth().heightIn(min = 160.dp),
-            label = { Text("Mesajın") }
-        )
+        Column {
+            FieldError(f.titleErr)
+            OutlinedTextField(
+                f.title, { f.title = it.take(100); f.titleErr = null }, Modifier.fillMaxWidth(),
+                label = { Text("Başlık") }, singleLine = true, isError = f.titleErr != null
+            )
+        }
+        Column {
+            FieldError(f.emailErr)
+            OutlinedTextField(
+                f.email, { f.email = it.take(120); f.emailErr = null }, Modifier.fillMaxWidth(),
+                label = { Text("E-posta") }, singleLine = true, isError = f.emailErr != null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+            )
+        }
+        Column {
+            FieldError(f.msgErr)
+            OutlinedTextField(
+                f.msg, { f.msg = it.take(2000); f.msgErr = null }, Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                label = { Text("Mesajın") }, isError = f.msgErr != null
+            )
+        }
         if (f.error != null) {
             Text(f.error!!, color = cs.error, style = MaterialTheme.typography.bodySmall)
         }
@@ -209,6 +230,14 @@ private fun ContactForm(f: FormState, onSend: () -> Unit) {
         key(f.captchaKey) {
             if (Contact.ENDPOINT.isNotBlank()) CaptchaView { f.token = it }
         }
+    }
+}
+
+/** Kutunun hemen üstünde kırmızı uyarı; hata yoksa yer kaplamaz. */
+@Composable
+private fun FieldError(msg: String?) {
+    AnimatedVisibility(visible = msg != null, enter = fadeIn(tween(200)) + expandVertically(), exit = fadeOut(tween(120)) + shrinkVertically()) {
+        Text(msg.orEmpty(), Modifier.padding(start = 4.dp, bottom = 4.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     }
 }
 
