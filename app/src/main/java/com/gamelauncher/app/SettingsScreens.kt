@@ -187,7 +187,7 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                         Sub.UPDATES -> UpdatesPage()
                         Sub.PERMS -> PermissionsPage(s)
                         Sub.HELP -> HelpPage()
-                        Sub.CONTACT -> {}   // şimdilik boş
+                        Sub.CONTACT -> ContactPage()
                         Sub.ABOUT -> AboutPage()
                     }
                 }
