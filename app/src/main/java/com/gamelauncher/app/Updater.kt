@@ -61,7 +61,7 @@ object Updater {
             return Release(
                 tag = tag,
                 build = Regex("(\\d+)\\s*$").find(tag)?.value?.toIntOrNull() ?: 0,
-                notes = o.optString("body"),
+                notes = if (o.isNull("body")) "" else o.optString("body"),
                 apkUrl = apk,
                 pageUrl = o.optString("html_url")
             )
