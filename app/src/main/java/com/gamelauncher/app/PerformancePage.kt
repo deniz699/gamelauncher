@@ -137,7 +137,7 @@ fun PerformancePage(onClose: () -> Unit) {
     confirm?.let { l ->
         AlertDialog(
             onDismissRequest = { confirm = null },
-            containerColor = cs.surfaceContainerHigh,
+            containerColor = popupColor(),
             icon = { Icon(Icons.Default.Warning, null, tint = cs.error) },
             title = { Text("Dikkat") },
             text = {
@@ -157,7 +157,7 @@ fun PerformancePage(onClose: () -> Unit) {
         )
     }
 
-    Surface(Modifier.fillMaxSize(), color = cs.background) {
+    PageSurface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             ScreenTopBar("Performans", onClose)
             Column(

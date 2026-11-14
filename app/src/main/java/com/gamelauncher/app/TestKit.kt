@@ -114,10 +114,10 @@ private fun BigTile(icon: ImageVector, title: String, sub: String, onClick: () -
     val cs = MaterialTheme.colorScheme
     Column(
         Modifier.fillMaxWidth().height(180.dp).flatClick(onClick = onClick)
-            .clip(RoundedCornerShape(32.dp)).background(cs.surfaceContainerHigh).padding(22.dp),
+            .glassSurface(RoundedCornerShape(32.dp), cs.surfaceContainerHigh).padding(22.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Box(Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(cs.primary), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(56.dp).glassSurface(RoundedCornerShape(18.dp), cs.primary), contentAlignment = Alignment.Center) {
             Icon(icon, null, Modifier.size(30.dp), tint = cs.onPrimary)
         }
         Column {
@@ -147,7 +147,7 @@ fun TestKitPage(onClose: () -> Unit) {
     }
     BackHandler { if (fill != null) fill = null else onClose() }
 
-    Surface(Modifier.fillMaxSize(), color = cs.background) {
+    PageSurface(Modifier.fillMaxSize(), color = cs.background) {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(16.dp, 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -203,7 +203,7 @@ private fun TouchTest(feedback: () -> Unit) {
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(
-            Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(cs.surfaceContainer)
+            Modifier.weight(1f).fillMaxWidth().glassSurface(RoundedCornerShape(16.dp), cs.surfaceContainer)
                 .pointerInput(Unit) {
                     var lastT = -1L
                     var ema = 0f
@@ -464,7 +464,7 @@ private fun TriggerBar(label: String, v: Float, modifier: Modifier) {
     val f = v.coerceIn(0f, 1f)
     Column(modifier) {
         Text("$label  ${(f * 100).roundToInt()}%", fontSize = 12.sp, color = cs.onSurfaceVariant, fontWeight = FontWeight.Medium)
-        Box(Modifier.padding(top = 6.dp).fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(cs.surfaceContainerHigh)) {
+        Box(Modifier.padding(top = 6.dp).fillMaxWidth().height(14.dp).glassSurface(RoundedCornerShape(7.dp), cs.surfaceContainerHigh)) {
             Box(Modifier.fillMaxWidth(f.coerceAtLeast(0.001f)).fillMaxHeight().background(cs.primary))
         }
     }
@@ -476,7 +476,7 @@ private fun Stick(label: String, x: Float, y: Float, pressed: Boolean) {
     val travel = with(LocalDensity.current) { 38.dp.toPx() }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(112.dp).clip(CircleShape).background(cs.surfaceContainerHigh),
+            Modifier.size(112.dp).glassSurface(CircleShape, cs.surfaceContainerHigh),
             contentAlignment = Alignment.Center
         ) {
             Box(

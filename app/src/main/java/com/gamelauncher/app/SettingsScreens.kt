@@ -64,20 +64,30 @@ import java.io.File
 @Composable
 fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = cs.background, contentColor = cs.onSurface) {
+    ModalBottomSheet(onDismissRequest = onClose, containerColor = sheetColor(), contentColor = cs.onSurface) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)
                 .navigationBarsPadding()
         ) {
             Text("Görünüm", style = MaterialTheme.typography.headlineSmall)
 
-            SectionLabel("Tema")
-            SegmentedChoice(listOf("Sistem", "Açık", "Koyu", "AMOLED"), s.themeMode) { s.setTheme(it) }
+            FlatCard(Modifier.padding(top = 16.dp), pad = 16.dp) {
+                ToggleRow(
+                    "Liquid Glass",
+                    "Buzlu cam (yarı saydam) görünüm. Açıkken koyu tema kullanılır.",
+                    s.glass, { s.changeGlass(it) }
+                )
+            }
+
+            if (!s.glass) {
+                SectionLabel("Tema")
+                SegmentedChoice(listOf("Sistem", "Açık", "Koyu", "AMOLED"), s.themeMode) { s.setTheme(it) }
+            }
 
             SectionLabel("Yazı boyutu")
             SegmentedChoice(listOf("Küçük", "Normal", "Büyük"), s.fontStep) { s.changeFontStep(it) }
 
-            if (android.os.Build.VERSION.SDK_INT >= 31) {
+            if (android.os.Build.VERSION.SDK_INT >= 31 && !s.glass) {
                 FlatCard(Modifier.padding(top = 16.dp), pad = 16.dp) {
                     ToggleRow(
                         "Telefonun renklerini kullan",
@@ -87,7 +97,7 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
                 }
             }
 
-            if (!s.dynamic || android.os.Build.VERSION.SDK_INT < 31) {
+            if (s.glass || !s.dynamic || android.os.Build.VERSION.SDK_INT < 31) {
                 SectionLabel("Vurgu rengi")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     accents.forEachIndexed { i, c ->
@@ -159,7 +169,7 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
     var sub by remember { mutableStateOf<Sub?>(null) }
     BackHandler { if (sub != null) sub = null else onClose() }
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    PageSurface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val cur = sub) {
             null -> Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 ScreenTopBar("Ayarlar", onClose)
@@ -168,6 +178,13 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                         .padding(horizontal = 16.dp).padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    FlatCard(pad = 16.dp) {
+                        ToggleRow(
+                            "Liquid Glass",
+                            "Buzlu cam görünümü: kartlar, düğmeler ve alt çubuk yarı saydam olur, arkada renkli ışıklar görünür. Koyu tema kullanır.",
+                            s.glass, { s.changeGlass(it) }
+                        )
+                    }
                     SettingsRow(Icons.Default.VerticalSplit, "Yan Panel", "Kenar paneli, FPS / sıcaklık göstergesi, uygulamalar") { sub = Sub.EDGE }
                     SettingsRow(Icons.Default.SystemUpdate, "Güncellemeler", "Sürüm ${Updater.current(LocalContext.current).name}") { sub = Sub.UPDATES }
                     SettingsRow(Icons.Default.Lock, "İzinler", if (s.hasUsage) "Kullanım erişimi verildi" else "Kullanım erişimi gerekli") { sub = Sub.PERMS }
@@ -201,11 +218,11 @@ private fun SettingsRow(icon: ImageVector, title: String, subtitle: String?, onC
     val cs = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().flatClick(onClick = onClick)
-            .clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainer).padding(14.dp),
+            .glassSurface(RoundedCornerShape(22.dp), cs.surfaceContainer).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(cs.primaryContainer),
+            Modifier.size(44.dp).glassSurface(RoundedCornerShape(14.dp), cs.primaryContainer),
             contentAlignment = Alignment.Center
         ) { Icon(icon, null, tint = cs.onPrimaryContainer) }
         Spacer(Modifier.width(14.dp))

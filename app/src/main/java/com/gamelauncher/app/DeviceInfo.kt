@@ -173,7 +173,7 @@ fun DevicePage(onClose: () -> Unit) {
     val data = remember(tick) { rows(ctx) }
 
     BackHandler(onBack = onClose)
-    Surface(Modifier.fillMaxSize(), color = cs.background) {
+    PageSurface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             ScreenTopBar("Cihaz bilgileri", onClose)
             Column(

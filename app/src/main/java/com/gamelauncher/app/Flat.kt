@@ -97,7 +97,7 @@ fun IconBox(
     radius: Dp = 14.dp
 ) {
     Box(
-        modifier.size(size).flatClick(onClick = onClick).clip(RoundedCornerShape(radius)).background(container),
+        modifier.size(size).flatClick(onClick = onClick).glassSurface(RoundedCornerShape(radius), container),
         contentAlignment = Alignment.Center
     ) { Icon(icon, desc, Modifier.size(22.dp), tint = tint) }
 }
@@ -129,7 +129,7 @@ fun FlatCard(
     pad: Dp = 18.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(radius)).background(color).padding(pad), content = content)
+    Column(modifier.fillMaxWidth().glassSurface(RoundedCornerShape(radius), color).padding(pad), content = content)
 }
 
 /** Süre: sayılar iri ve kalın, "sa" / "dk" birimleri küçük. */
@@ -158,7 +158,7 @@ fun StatTile(
     content: Color = MaterialTheme.colorScheme.onSurface,
     valueSize: TextUnit = 24.sp
 ) {
-    Column(modifier.clip(RoundedCornerShape(22.dp)).background(container).padding(16.dp)) {
+    Column(modifier.glassSurface(RoundedCornerShape(22.dp), container).padding(16.dp)) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = content.copy(alpha = 0.7f))
         Spacer(Modifier.size(6.dp))
         DurationText(ms, content, valueSize)
@@ -230,20 +230,23 @@ fun FlatBottomNav(
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
+    val glass = LocalGlass.current
     Row(
-        modifier.clip(RoundedCornerShape(28.dp)).background(cs.surfaceContainerHigh).padding(6.dp),
+        modifier.glassSurface(RoundedCornerShape(28.dp), cs.surfaceContainerHigh).padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         items.forEachIndexed { i, (label, icon) ->
             val sel = i == selected
             val w by animateFloatAsState(if (sel) maxOf(2.2f, 0.8f + label.length * 0.14f) else 1f, spring(dampingRatio = 0.8f, stiffness = 400f), label = "navW")
-            val bg by animateColorAsState(if (sel) cs.primary else Color.Transparent, tween(200), label = "navBg")
-            val fg by animateColorAsState(if (sel) cs.onPrimary else cs.onSurfaceVariant, tween(200), label = "navFg")
+            val selBg = if (glass) Color.White.copy(alpha = 0.16f) else cs.primary
+            val selFg = if (glass) Color.White else cs.onPrimary
+            val bg by animateColorAsState(if (sel) selBg else Color.Transparent, tween(200), label = "navBg")
+            val fg by animateColorAsState(if (sel) selFg else cs.onSurfaceVariant, tween(200), label = "navFg")
             val iconPop by animateFloatAsState(if (sel) 1.15f else 1f, spring(dampingRatio = 0.35f, stiffness = 300f), label = "navPop")
             Row(
                 Modifier.weight(w).fillMaxHeight().flatClick { onSelect(i) }
-                    .clip(RoundedCornerShape(22.dp)).background(bg),
+                    .glassSurface(RoundedCornerShape(22.dp), bg),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {

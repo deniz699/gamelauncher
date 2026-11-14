@@ -145,7 +145,7 @@ fun EdgePanelSettings() {
 
         ModalBottomSheet(
             onDismissRequest = { picker = false },
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = sheetColor(),
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
             Column(Modifier.fillMaxHeight(0.85f).padding(horizontal = 16.dp)) {

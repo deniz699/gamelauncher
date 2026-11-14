@@ -177,7 +177,7 @@ fun GameStatsPage(s: AppState, pkg: String, onClose: () -> Unit) {
     var coverOpen by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
-    Surface(Modifier.fillMaxSize(), color = cs.background) {
+    PageSurface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             ScreenTopBar(g.name, onClose)
             Column(

@@ -55,6 +55,10 @@ class AppState(private val ctx: Context) {
 
     var iconDark by mutableStateOf(prefs.getBoolean("icon_dark", false)) // false beyaz simge, true siyah simge
 
+    /** Liquid Glass (buzlu cam) görünümü */
+    var glass by mutableStateOf(prefs.getBoolean("glass", false))
+    fun changeGlass(v: Boolean) { glass = v; prefs.edit().putBoolean("glass", v).apply() }
+
     @JvmName("applyIconDark") fun setIconDark(v: Boolean) { iconDark = v; prefs.edit().putBoolean("icon_dark", v).apply() }
 
     // ---------- Görünüm: liste/ızgara, yazı boyutu; gruplar ----------

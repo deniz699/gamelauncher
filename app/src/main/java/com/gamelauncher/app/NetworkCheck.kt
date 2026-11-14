@@ -457,7 +457,7 @@ fun NetworkPage(onClose: () -> Unit) {
     val region = remember { RegionState() }
 
     BackHandler(onBack = onClose)
-    Surface(Modifier.fillMaxSize(), color = cs.background) {
+    PageSurface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             ScreenTopBar("Ağ kontrolü", onClose)
             Box(Modifier.padding(horizontal = 16.dp)) {
@@ -500,7 +500,7 @@ private fun mbps(v: Double): String = if (v < 0) "—" else if (v >= 100) "%.0f"
 @Composable
 private fun SpeedStat(label: String, value: String, unit: String, color: Color, modifier: Modifier) {
     val cs = MaterialTheme.colorScheme
-    Column(modifier.clip(RoundedCornerShape(18.dp)).background(cs.surfaceContainerHigh).padding(14.dp)) {
+    Column(modifier.glassSurface(RoundedCornerShape(18.dp), cs.surfaceContainerHigh).padding(14.dp)) {
         Text(label, fontSize = 12.sp, color = cs.onSurfaceVariant, fontWeight = FontWeight.Medium)
         Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Bottom) {
             Text(value, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, color = color)

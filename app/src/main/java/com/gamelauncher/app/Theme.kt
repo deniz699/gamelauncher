@@ -104,11 +104,40 @@ private fun flatScheme(a: Color, dark: Boolean, amoled: Boolean): ColorScheme {
     }
 }
 
+/**
+ * Liquid Glass şeması: her zaman koyu. Yüzeyler opak değil, yarı saydam beyaz katmanlardır;
+ * arkadaki renkli ışık (GlassBackdrop) içlerinden görünür ve buzlu cam hissi verir.
+ */
+private fun glassScheme(a: Color): ColorScheme {
+    val bg = Color(0xFF0B0A1E)
+    fun w(x: Float) = Color.White.copy(alpha = x)
+    val onA = if (a.luminance() > 0.45f) Color(0xFF111111) else Color.White
+    return darkColorScheme(
+        primary = a, onPrimary = onA,
+        primaryContainer = a.copy(alpha = 0.32f), onPrimaryContainer = lerp(a, Color.White, 0.75f),
+        secondary = a, onSecondary = onA,
+        secondaryContainer = w(0.16f), onSecondaryContainer = Color.White,
+        tertiary = a, onTertiary = onA,
+        background = bg, onBackground = Color(0xFFF6F4FF),
+        surface = bg, onSurface = Color(0xFFF6F4FF),
+        surfaceVariant = w(0.10f), onSurfaceVariant = Color(0xFFB9B5D0),
+        surfaceDim = bg, surfaceBright = w(0.20f),
+        surfaceContainerLowest = w(0.04f), surfaceContainerLow = w(0.06f),
+        surfaceContainer = w(0.09f), surfaceContainerHigh = w(0.13f), surfaceContainerHighest = w(0.19f),
+        outline = w(0.35f), outlineVariant = w(0.16f)
+    )
+}
+
 @Composable
-fun LauncherTheme(mode: Int, accent: Int, dynamic: Boolean, fontStep: Int = 1, content: @Composable () -> Unit) {
-    val dark = when (mode) { 1 -> false; 2, 3 -> true; else -> isSystemInDarkTheme() }
+fun LauncherTheme(
+    mode: Int, accent: Int, dynamic: Boolean, fontStep: Int = 1, glass: Boolean = false,
+    content: @Composable () -> Unit
+) {
+    val dark = if (glass) true else when (mode) { 1 -> false; 2, 3 -> true; else -> isSystemInDarkTheme() }
     val ctx = LocalContext.current
-    val scheme = if (dynamic && Build.VERSION.SDK_INT >= 31) {
+    val scheme = if (glass) {
+        glassScheme(accents[accent.coerceIn(accents.indices)])
+    } else if (dynamic && Build.VERSION.SDK_INT >= 31) {
         var sc = if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         if (mode == 3) sc = sc.copy(
             background = Color.Black, surface = Color.Black, surfaceContainerLowest = Color.Black,
@@ -123,6 +152,7 @@ fun LauncherTheme(mode: Int, accent: Int, dynamic: Boolean, fontStep: Int = 1, c
         val d = LocalDensity.current
         val mult = when (fontStep) { 0 -> 0.9f; 2 -> 1.15f; else -> 1f }
         CompositionLocalProvider(
+            LocalGlass provides glass,
             LocalContentColor provides scheme.onBackground,
             LocalDensity provides Density(d.density, d.fontScale * mult),
             content = content

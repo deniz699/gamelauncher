@@ -19,7 +19,7 @@ class MainActivity : ComponentActivity() {
         }
         state = AppState(applicationContext)
         setContent {
-            LauncherTheme(state.themeMode, state.accent, state.dynamic, state.fontStep) { App(state) }
+            LauncherTheme(state.themeMode, state.accent, state.dynamic, state.fontStep, state.glass) { App(state) }
         }
     }
 

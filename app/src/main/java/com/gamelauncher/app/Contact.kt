@@ -173,7 +173,7 @@ private fun ContactIntro(onStart: () -> Unit) {
 
     Column(Modifier.fillMaxWidth().padding(top = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(120.dp).scale(pop.value).clip(CircleShape).background(cs.primaryContainer),
+            Modifier.size(120.dp).scale(pop.value).glassSurface(CircleShape, cs.primaryContainer),
             contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.Mail, null, Modifier.size(58.dp), tint = cs.onPrimaryContainer) }
         Spacer(Modifier.height(32.dp))

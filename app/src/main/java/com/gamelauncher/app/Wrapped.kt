@@ -598,7 +598,7 @@ fun WrappedPage(s: AppState, g: Game, onClose: () -> Unit) {
         }
     }
 
-    Surface(Modifier.fillMaxSize(), color = cs.background) {
+    PageSurface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             ScreenTopBar("Wrapped", onClose)
             Column(
@@ -607,7 +607,7 @@ fun WrappedPage(s: AppState, g: Game, onClose: () -> Unit) {
             ) {
                 Box(
                     Modifier.fillMaxWidth(0.68f).align(Alignment.CenterHorizontally).aspectRatio(9f / 16f)
-                        .clip(RoundedCornerShape(24.dp)).background(cs.surfaceContainer),
+                        .glassSurface(RoundedCornerShape(24.dp), cs.surfaceContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     val b = bmp

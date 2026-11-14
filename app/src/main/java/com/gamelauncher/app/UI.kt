@@ -140,6 +140,7 @@ fun App(s: AppState) {
     }
 
     Box(Modifier.fillMaxSize().background(cs.background)) {
+        if (LocalGlass.current) GlassBackdrop()
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HomeHeader(
                 s, tab, searching, query, { query = it },
@@ -209,7 +210,7 @@ fun App(s: AppState) {
     delGroup?.let { n ->
         AlertDialog(
             onDismissRequest = { delGroup = null },
-            containerColor = cs.surfaceContainerHigh,
+            containerColor = popupColor(),
             title = { Text("Grup silinsin mi?") },
             text = { Text("\"$n\" grubu silinir. Oyunlar silinmez, sadece gruptan çıkar.") },
             confirmButton = {
@@ -280,8 +281,8 @@ private fun SearchPill(
         }
     }
     Row(
-        Modifier.width(width).height(44.dp).clip(RoundedCornerShape(14.dp))
-            .background(if (active) cs.surfaceContainerHighest else cs.surfaceContainerHigh)
+        Modifier.width(width).height(44.dp)
+            .glassSurface(RoundedCornerShape(14.dp), if (active) cs.surfaceContainerHighest else cs.surfaceContainerHigh)
             .clickable(enabled = !active, interactionSource = src, indication = null) { onToggle() },
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -318,7 +319,7 @@ private fun FlatChip(
     val fg by animateColorAsState(if (selected) cs.onPrimary else cs.onSurface, tween(180), label = "chipFg")
     Row(
         Modifier.flatClick(onLongClick = onLongClick, onClick = onClick)
-            .clip(RoundedCornerShape(50)).background(bg)
+            .glassSurface(RoundedCornerShape(50), bg)
             .padding(start = 16.dp, end = if (onTrailing != null) 8.dp else 16.dp, top = 9.dp, bottom = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -363,13 +364,15 @@ private fun FilterRow(
         Spacer(Modifier.width(8.dp))
         Box {
             IconBox(Icons.AutoMirrored.Filled.Sort, "Sırala", { sortMenu = true }, size = 40.dp, radius = 12.dp)
-            DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                SortMode.entries.forEach { m ->
-                    DropdownMenuItem(
-                        text = { Text(m.label) },
-                        leadingIcon = { if (s.sort == m) Icon(Icons.Default.Check, null) },
-                        onClick = { s.setSort(m); sortMenu = false }
-                    )
+            PopupTheme {
+                DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                    SortMode.entries.forEach { m ->
+                        DropdownMenuItem(
+                            text = { Text(m.label) },
+                            leadingIcon = { if (s.sort == m) Icon(Icons.Default.Check, null) },
+                            onClick = { s.setSort(m); sortMenu = false }
+                        )
+                    }
                 }
             }
         }
@@ -382,7 +385,7 @@ private fun NewGroupDialog(onAdd: (String) -> Unit, onClose: () -> Unit) {
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onClose,
-        containerColor = cs.surfaceContainerHigh,
+        containerColor = popupColor(),
         title = { Text("Yeni grup") },
         text = {
             TextField(
@@ -411,7 +414,7 @@ private fun UsageBanner() {
     val cs = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(20.dp)).background(cs.primaryContainer)
+            .glassSurface(RoundedCornerShape(20.dp), cs.primaryContainer)
             .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -443,11 +446,12 @@ private fun HomeSummary(s: AppState, onStats: () -> Unit, onDevice: () -> Unit, 
     Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(
             Modifier.weight(1.5f).fillMaxHeight().flatClick(onClick = onStats)
-                .clip(RoundedCornerShape(28.dp)).background(cs.primary).padding(18.dp),
+                .glassTinted(RoundedCornerShape(28.dp), cs.primary).padding(18.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Bugün oynanan", color = cs.onPrimary.copy(alpha = 0.75f), fontWeight = FontWeight.Medium, fontSize = 13.sp)
-            DurationText(today, cs.onPrimary, 36.sp)
+            val onCard = if (LocalGlass.current) Color.White else cs.onPrimary
+            Text("Bugün oynanan", color = onCard.copy(alpha = 0.78f), fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            DurationText(today, onCard, 36.sp)
         }
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionTile(Icons.Default.FlashOn, "RAM temizle", Modifier.weight(1f)) {
@@ -464,10 +468,16 @@ private fun ActionTile(icon: ImageVector, label: String, modifier: Modifier, onC
     val cs = MaterialTheme.colorScheme
     Row(
         modifier.fillMaxWidth().flatClick(onClick = onClick)
-            .clip(RoundedCornerShape(20.dp)).background(cs.surfaceContainerHigh).padding(horizontal = 14.dp),
+            .glassTinted(RoundedCornerShape(20.dp), Color(0xFF3558FF), cs.surfaceContainerHigh).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, Modifier.size(20.dp), tint = cs.primary)
+        if (LocalGlass.current) {
+            Box(Modifier.size(30.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.28f)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, Modifier.size(17.dp), tint = cs.primary)
+            }
+        } else {
+            Icon(icon, null, Modifier.size(20.dp), tint = cs.primary)
+        }
         Spacer(Modifier.width(8.dp))
         Text(label, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
@@ -498,7 +508,7 @@ private fun RecentStrip(s: AppState) {
             items(recent, key = { it.pkg }) { g ->
                 Row(
                     Modifier.flatClick { s.launch(g.pkg) }
-                        .clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainer).padding(8.dp),
+                        .glassTinted(RoundedCornerShape(22.dp), Color(0xFF7B4DFF), cs.surfaceContainer).padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Cover(g, Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)), 0.85f)
@@ -508,7 +518,7 @@ private fun RecentStrip(s: AppState) {
                         Text(agoText(g.lastPlayed), fontSize = 12.sp, color = cs.onSurfaceVariant, maxLines = 1)
                     }
                     Spacer(Modifier.width(8.dp))
-                    Box(Modifier.size(34.dp).clip(CircleShape).background(cs.primary), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(34.dp).glassSurface(CircleShape, cs.primary), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.PlayArrow, "Devam et", Modifier.size(20.dp), tint = cs.onPrimary)
                     }
                     Spacer(Modifier.width(4.dp))
@@ -639,7 +649,7 @@ private fun GameTile(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit,
     val total = remember(s.sessions, g.pkg) { playedMs(s.sessions, g.pkg, Range.ALL) }
     Column(
         Modifier.enterAnim(index).flatClick(onLongClick = { onOpen(g.pkg) }) { s.launch(g.pkg) }
-            .clip(RoundedCornerShape(26.dp)).background(cs.surfaceContainer).padding(8.dp)
+            .glassSurface(RoundedCornerShape(26.dp), cs.surfaceContainer).padding(8.dp)
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp))) {
             Cover(g, Modifier.fillMaxSize())
@@ -659,19 +669,19 @@ private fun GameTile(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier.clip(RoundedCornerShape(50)).background(cs.surfaceContainerHighest)
+                Modifier.glassSurface(RoundedCornerShape(50), cs.surfaceContainerHighest)
                     .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
                 Text(fmtDur(total), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurfaceVariant, maxLines = 1)
             }
             Spacer(Modifier.weight(1f))
             Box(
-                Modifier.size(36.dp).flatClick { onInfo(g.pkg) }.clip(CircleShape).background(cs.surfaceContainerHighest),
+                Modifier.size(36.dp).flatClick { onInfo(g.pkg) }.glassSurface(CircleShape, cs.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Default.Info, "İstatistikler", Modifier.size(20.dp), tint = cs.onSurfaceVariant) }
             Spacer(Modifier.width(8.dp))
             Box(
-                Modifier.size(36.dp).flatClick { s.launch(g.pkg) }.clip(CircleShape).background(cs.primary),
+                Modifier.size(36.dp).flatClick { s.launch(g.pkg) }.glassSurface(CircleShape, cs.primary),
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Default.PlayArrow, "Oyna", Modifier.size(22.dp), tint = cs.onPrimary) }
         }
@@ -685,7 +695,7 @@ private fun GameRow(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit, 
     val total = remember(s.sessions, g.pkg) { playedMs(s.sessions, g.pkg, Range.ALL) }
     Row(
         Modifier.enterAnim(index).fillMaxWidth().flatClick(onLongClick = { onOpen(g.pkg) }) { s.launch(g.pkg) }
-            .clip(RoundedCornerShape(24.dp)).background(cs.surfaceContainer).padding(8.dp),
+            .glassSurface(RoundedCornerShape(24.dp), cs.surfaceContainer).padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Cover(g, Modifier.size(64.dp).clip(RoundedCornerShape(18.dp)))
@@ -701,12 +711,12 @@ private fun GameRow(s: AppState, g: Game, index: Int, onOpen: (String) -> Unit, 
         HeartButton(g.favorite, { s.toggleFav(g.pkg) }, size = 40.dp, container = cs.surfaceContainerHighest, iconSize = 20.dp)
         Spacer(Modifier.width(8.dp))
         Box(
-            Modifier.size(40.dp).flatClick { onInfo(g.pkg) }.clip(CircleShape).background(cs.surfaceContainerHighest),
+            Modifier.size(40.dp).flatClick { onInfo(g.pkg) }.glassSurface(CircleShape, cs.surfaceContainerHighest),
             contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.Info, "İstatistikler", Modifier.size(22.dp), tint = cs.onSurfaceVariant) }
         Spacer(Modifier.width(8.dp))
         Box(
-            Modifier.size(40.dp).flatClick { s.launch(g.pkg) }.clip(CircleShape).background(cs.primary),
+            Modifier.size(40.dp).flatClick { s.launch(g.pkg) }.glassSurface(CircleShape, cs.primary),
             contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.PlayArrow, "Oyna", Modifier.size(24.dp), tint = cs.onPrimary) }
         Spacer(Modifier.width(2.dp))
@@ -755,7 +765,7 @@ fun AddSheet(s: AppState, onClose: () -> Unit) {
     val added = s.games.map { it.pkg }.toSet()
     val shown = all.filter { it.pkg !in added && it.name.contains(query, ignoreCase = true) }
 
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = cs.background, contentColor = cs.onSurface) {
+    ModalBottomSheet(onDismissRequest = onClose, containerColor = sheetColor(), contentColor = cs.onSurface) {
         Column(Modifier.fillMaxHeight(0.85f).padding(horizontal = 20.dp)) {
             Text("Oyun ekle", style = MaterialTheme.typography.headlineSmall)
             Text(
@@ -774,14 +784,14 @@ fun AddSheet(s: AppState, onClose: () -> Unit) {
                     }
                     Row(
                         Modifier.fillMaxWidth().flatClick { s.add(a.pkg, a.name); onClose() }
-                            .clip(RoundedCornerShape(18.dp)).background(cs.surfaceContainer).padding(10.dp),
+                            .glassSurface(RoundedCornerShape(18.dp), cs.surfaceContainer).padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (icon != null) Image(icon, null, Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)))
                         Spacer(Modifier.width(12.dp))
                         Text(a.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                         Box(
-                            Modifier.size(32.dp).clip(CircleShape).background(cs.primaryContainer),
+                            Modifier.size(32.dp).glassSurface(CircleShape, cs.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) { Icon(Icons.Default.Add, "Ekle", Modifier.size(18.dp), tint = cs.onPrimaryContainer) }
                     }
@@ -859,7 +869,7 @@ private fun DetailSheetContent(s: AppState, pkg: String, onClose: () -> Unit) {
         runCatching { ctx.packageManager.getPackageInfo(pkg, 0).firstInstallTime }.getOrDefault(0L)
     }
 
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = cs.background, contentColor = cs.onSurface) {
+    ModalBottomSheet(onDismissRequest = onClose, containerColor = sheetColor(), contentColor = cs.onSurface) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp).navigationBarsPadding()
@@ -927,7 +937,7 @@ private fun DetailSheetContent(s: AppState, pkg: String, onClose: () -> Unit) {
             }
             Row(
                 Modifier.fillMaxWidth().padding(top = 10.dp).flatClick { confirm = true }
-                    .clip(RoundedCornerShape(14.dp)).background(cs.errorContainer).padding(vertical = 12.dp),
+                    .glassSurface(RoundedCornerShape(14.dp), cs.errorContainer).padding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -940,7 +950,7 @@ private fun DetailSheetContent(s: AppState, pkg: String, onClose: () -> Unit) {
 
     if (confirm) AlertDialog(
         onDismissRequest = { confirm = false },
-        containerColor = cs.surfaceContainerHigh,
+        containerColor = popupColor(),
         title = { Text("Kaldırılsın mı?") },
         text = { Text("${g.name} listeden ve oynama geçmişi kayıtlarından silinir. Oyun telefondan silinmez.") },
         confirmButton = { TextButton(onClick = { confirm = false; s.remove(pkg); onClose() }) { Text("Kaldır", color = cs.error) } },
@@ -1001,7 +1011,7 @@ private fun computeRecords(sessions: List<Session>): Records {
 @Composable
 private fun RecordTile(label: String, value: String, sub: String, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
-    Column(modifier.clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainer).padding(16.dp)) {
+    Column(modifier.glassSurface(RoundedCornerShape(22.dp), cs.surfaceContainer).padding(16.dp)) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
         Spacer(Modifier.height(6.dp))
         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp, maxLines = 1)
@@ -1049,10 +1059,11 @@ fun StatsTab(s: AppState, onGame: (String) -> Unit) {
     val dayFmt = remember { DateTimeFormatter.ofPattern("d MMMM", Locale("tr")) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cs.primary).padding(22.dp)) {
-            Text("Toplam oynama süresi", color = cs.onPrimary.copy(alpha = 0.75f), fontWeight = FontWeight.Medium)
+        Column(Modifier.fillMaxWidth().glassTinted(RoundedCornerShape(28.dp), cs.primary).padding(22.dp)) {
+            val onCard = if (LocalGlass.current) Color.White else cs.onPrimary
+            Text("Toplam oynama süresi", color = onCard.copy(alpha = 0.78f), fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(8.dp))
-            DurationText(totals[Range.ALL] ?: 0L, cs.onPrimary, 48.sp)
+            DurationText(totals[Range.ALL] ?: 0L, onCard, 48.sp)
         }
         Spacer(Modifier.height(10.dp))
         listOf(Range.TODAY to Range.WEEK, Range.MONTH to Range.YEAR).forEach { (a, b) ->
@@ -1098,7 +1109,7 @@ fun StatsTab(s: AppState, onGame: (String) -> Unit) {
         ranked.forEachIndexed { i, (g, ms) ->
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 10.dp).flatClick { onGame(g.pkg) }
-                    .clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainer).padding(12.dp),
+                    .glassSurface(RoundedCornerShape(22.dp), cs.surfaceContainer).padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -1148,8 +1159,7 @@ fun PlayButton(onClick: () -> Unit, modifier: Modifier = Modifier, label: String
     Box(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(if (compact) 12.dp else 16.dp))
-            .background(bg)
+            .glassSurface(RoundedCornerShape(if (compact) 12.dp else 16.dp), bg)
             .clickable(interactionSource = src, indication = null, onClick = onClick)
             .padding(vertical = if (compact) 6.dp else 14.dp),
         contentAlignment = Alignment.Center
@@ -1181,8 +1191,7 @@ fun SoftButton(
     Row(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(14.dp))
-            .background(bg)
+            .glassSurface(RoundedCornerShape(14.dp), bg)
             .clickable(interactionSource = src, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,
@@ -1206,8 +1215,7 @@ fun FlatSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Box(
         Modifier
             .width(48.dp).height(28.dp)
-            .clip(RoundedCornerShape(50))
-            .background(track)
+            .glassSurface(RoundedCornerShape(50), track)
             .toggleable(
                 value = checked, role = Role.Switch,
                 interactionSource = remember { MutableInteractionSource() }, indication = null,
@@ -1228,14 +1236,14 @@ fun FlatSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
 fun SegmentedChoice(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(cs.surfaceContainerHigh).padding(4.dp)
+        Modifier.fillMaxWidth().glassSurface(RoundedCornerShape(18.dp), cs.surfaceContainerHigh).padding(4.dp)
     ) {
         options.forEachIndexed { i, label ->
             val sel = i == selected
             val bg by animateColorAsState(if (sel) cs.primary else Color.Transparent, tween(180), label = "segBg")
             val fg by animateColorAsState(if (sel) cs.onPrimary else cs.onSurfaceVariant, tween(180), label = "segFg")
             Box(
-                Modifier.weight(1f).flatClick { onSelect(i) }.clip(RoundedCornerShape(14.dp)).background(bg)
+                Modifier.weight(1f).flatClick { onSelect(i) }.glassSurface(RoundedCornerShape(14.dp), bg)
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
