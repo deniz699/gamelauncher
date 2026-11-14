@@ -778,7 +778,7 @@ fun AddSheet(s: AppState, onClose: () -> Unit) {
     val added = s.games.map { it.pkg }.toSet()
     val shown = all.filter { it.pkg !in added && it.name.contains(query, ignoreCase = true) }
 
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = sheetColor(), contentColor = cs.onSurface) {
+    GlassSheet(onClose) {
         Column(Modifier.fillMaxHeight(0.85f).padding(horizontal = 20.dp)) {
             Text("Oyun ekle", style = MaterialTheme.typography.headlineSmall)
             Text(
@@ -882,7 +882,7 @@ private fun DetailSheetContent(s: AppState, pkg: String, onClose: () -> Unit) {
         runCatching { ctx.packageManager.getPackageInfo(pkg, 0).firstInstallTime }.getOrDefault(0L)
     }
 
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = sheetColor(), contentColor = cs.onSurface) {
+    GlassSheet(onClose) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp).navigationBarsPadding()

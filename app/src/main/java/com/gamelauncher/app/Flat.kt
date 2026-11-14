@@ -232,7 +232,7 @@ fun FlatBottomNav(
     val cs = MaterialTheme.colorScheme
     val glass = LocalGlass.current
     Row(
-        modifier.glassBackdropBlur(RoundedCornerShape(28.dp)).glassSurface(RoundedCornerShape(28.dp), cs.surfaceContainerHigh).padding(6.dp),
+        modifier.glassSurface(RoundedCornerShape(28.dp), cs.surfaceContainerHigh, blurContent = true).padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

@@ -4,10 +4,14 @@ import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,6 +79,22 @@ fun PopupTheme(content: @Composable () -> Unit) {
     }
 }
 
+/**
+ * Alt sayfa (bottom sheet): ayrı bir pencerede açıldığı ve zemini zaten neredeyse opak olduğu için
+ * içindeki kartlarda arka plan bulanıklığı kapatılır (yoksa kartlar fotoğraf gibi görünürdü).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GlassSheet(onDismissRequest: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        containerColor = sheetColor(),
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        CompositionLocalProvider(LocalGlassBackdrop provides null, LocalGlassSource provides null) { content() }
+    }
+}
+
 private val rimBrush = Brush.linearGradient(
     listOf(Color.White.copy(alpha = 0.60f), Color.White.copy(alpha = 0.07f), Color.White.copy(alpha = 0.26f))
 )
@@ -83,14 +103,58 @@ private val sheenBrush = Brush.linearGradient(
 )
 
 /**
- * Düz modda: klip + düz renk (eskisiyle aynı).
- * Cam modunda: aynı renk (şeffaf olduğu için arka plan görünür) + ışık yansıması + parlak kenar.
+ * Tüm arka planın (renk / resim / GIF / video) bir kez bulanıklaştırılmış kopyası.
+ * Her cam yüzey bunun kendi altına denk gelen parçasını çizer; böylece her kartın arkası buzlu cam olur
+ * ve yazılar arka plan resmine karışmaz. Android 12 altında ya da cam modu kapalıyken null.
  */
-fun Modifier.glassSurface(shape: Shape, color: Color): Modifier = composed {
+val LocalGlassBackdrop = compositionLocalOf<GraphicsLayer?> { null }
+
+/** Cam yüzeylerin altına konan koyu perde: okunabilirlik için (bulanık arka plan parlaksa bile yazı net kalır). */
+private const val GLASS_SCRIM = 0.26f
+private const val GLASS_SCRIM_TINTED = 0.10f
+
+/** Bundan küçük öğeler (düğme, çip, anahtar) zaten bir kartın içindedir; onlara ayrıca bulanık arka plan çizilmez. */
+private val MIN_BLUR_SIZE = 44.dp
+
+/** Bulanık arka planın bu öğenin altına denk gelen kısmını çizer. Ekran koordinatına hizalıdır, kaydırınca kaymaz. */
+private fun Modifier.blurredBackdrop(): Modifier = composed {
+    val layer = LocalGlassBackdrop.current
+    if (!LocalGlass.current || layer == null) {
+        Modifier
+    } else {
+        var pos by remember { mutableStateOf(Offset.Zero) }
+        Modifier
+            .onGloballyPositioned { c ->
+                val p = c.positionInRoot()
+                if (p != pos) pos = p
+            }
+            .drawBehind {
+                if (size.minDimension >= MIN_BLUR_SIZE.toPx()) {
+                    translate(-pos.x, -pos.y) { drawLayer(layer) }
+                }
+            }
+    }
+}
+
+/** Büyük cam öğeler için koyu perde (küçük öğelerde çizilmez). */
+private fun Modifier.glassScrim(alpha: Float): Modifier = drawBehind {
+    if (size.minDimension >= MIN_BLUR_SIZE.toPx()) drawRect(Color.Black.copy(alpha = alpha))
+}
+
+/**
+ * Düz modda: klip + düz renk (eskisiyle aynı).
+ * Cam modunda: bulanık arka plan + koyu perde + yarı saydam renk + ışık yansıması + parlak kenar.
+ * [blurContent] true ise (alt çubuk) altından kayan kartlar da bulanıklaştırılır.
+ */
+fun Modifier.glassSurface(shape: Shape, color: Color, blurContent: Boolean = false): Modifier = composed {
     if (!LocalGlass.current) {
         Modifier.clip(shape).background(color)
     } else {
-        Modifier.clip(shape).background(color)
+        Modifier.clip(shape)
+            .blurredBackdrop()
+            .then(if (blurContent) Modifier.glassBackdropBlur(shape) else Modifier)
+            .glassScrim(GLASS_SCRIM)
+            .background(color)
             .background(sheenBrush, shape)
             .border(1.dp, rimBrush, shape)
     }
@@ -102,6 +166,8 @@ fun Modifier.glassTinted(shape: Shape, tint: Color, flat: Color = tint): Modifie
         Modifier.clip(shape).background(flat)
     } else {
         Modifier.clip(shape)
+            .blurredBackdrop()
+            .glassScrim(GLASS_SCRIM_TINTED)
             .background(Brush.linearGradient(listOf(tint.copy(alpha = 0.82f), tint.copy(alpha = 0.40f))), shape)
             .background(sheenBrush, shape)
             .border(1.dp, rimBrush, shape)
@@ -154,10 +220,29 @@ fun Modifier.glassBackdropBlur(shape: Shape, radius: Float = 36f): Modifier = co
  * varsa seçilen resim / GIF / video ekranı kaplayacak şekilde gösterilir, üstüne okunurluk için hafif karartma gelir.
  */
 @Composable
-fun GlassBackdrop(path: String? = null, kind: String = "image", modifier: Modifier = Modifier) {
+fun GlassBackdrop(
+    path: String? = null, kind: String = "image", modifier: Modifier = Modifier,
+    blurLayer: GraphicsLayer? = null
+) {
     val accent = MaterialTheme.colorScheme.primary
     val file = remember(path) { path?.let { java.io.File(it) }?.takeIf { it.exists() } }
-    Box(modifier.fillMaxSize()) {
+    val raw = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    Box(
+        modifier.fillMaxSize().then(
+            if (blurLayer == null) Modifier else Modifier.drawWithContent {
+                // Arka plan bir katmana kaydedilir; ekrana normal çizilir, ayrıca bulanık kopyası kartlar için hazırlanır
+                val sz = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
+                raw.record(this, layoutDirection, sz) { this@drawWithContent.drawContent() }
+                blurLayer.renderEffect =
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        val r = 22.dp.toPx()
+                        BlurEffect(r, r, TileMode.Clamp)
+                    } else null
+                blurLayer.record(this, layoutDirection, sz) { drawLayer(raw) }
+                drawLayer(raw)
+            }
+        )
+    ) {
         if (file == null) {
             Box(
                 Modifier.fillMaxSize().drawWithCache {

@@ -22,8 +22,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             LauncherTheme(state.themeMode, state.accent, state.dynamic, state.fontStep, state.glass) {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
-                    if (state.glass) GlassBackdrop(state.bgPath, state.bgKind)
-                    App(state)
+                    // Arka planın bulanık kopyası: tüm cam kartlar kendi altına denk gelen kısmı buradan çizer
+                    val blurred = androidx.compose.ui.graphics.rememberGraphicsLayer()
+                    if (state.glass) GlassBackdrop(state.bgPath, state.bgKind, blurLayer = blurred)
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        LocalGlassBackdrop provides (if (state.glass) blurred else null)
+                    ) { App(state) }
                 }
             }
         }

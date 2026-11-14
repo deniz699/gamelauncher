@@ -64,7 +64,7 @@ import java.io.File
 @Composable
 fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = sheetColor(), contentColor = cs.onSurface) {
+    GlassSheet(onClose) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)
                 .navigationBarsPadding()
