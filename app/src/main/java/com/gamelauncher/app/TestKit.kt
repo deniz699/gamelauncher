@@ -104,7 +104,7 @@ fun ToolsTab(onKit: () -> Unit, onNet: () -> Unit) {
         Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, bottom = 110.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
     ) {
-        BigTile(Icons.Default.TouchApp, "Test Kiti", "Dokunma, ekran ve kumanda testi", onKit)
+        BigTile(Icons.Default.TouchApp, "Test Kiti", "Dokunma, ekran, kumanda ve refleks testi", onKit)
         BigTile(Icons.Default.NetworkCheck, "Ağ Kontrolü ve Hız Testi", "Ping, indirme, yükleme, Wi-Fi mi 4G/5G mi", onNet)
     }
 }
@@ -165,7 +165,7 @@ fun TestKitPage(onClose: () -> Unit) {
                     )
                 }
                 Box(Modifier.padding(horizontal = 16.dp)) {
-                    SegmentedChoice(listOf("Dokunma", "Ekran", "Kumanda"), tab) { tab = it }
+                    SegmentedChoice(listOf("Dokunma", "Ekran", "Kumanda", "Refleks"), tab) { tab = it }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp)) {
                     when (tab) {
@@ -174,7 +174,11 @@ fun TestKitPage(onClose: () -> Unit) {
                             if (sound) runCatching { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 30) }
                         }
                         1 -> DisplayTest { fill = it }
-                        else -> ControllerTest()
+                        2 -> ControllerTest()
+                        else -> ReflexGame {
+                            if (haptic) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            if (sound) runCatching { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 30) }
+                        }
                     }
                 }
             }
