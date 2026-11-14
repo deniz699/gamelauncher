@@ -60,6 +60,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.layer.rememberGraphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -140,7 +143,18 @@ fun App(s: AppState) {
     }
 
     Box(Modifier.fillMaxSize().background(cs.background)) {
-        if (LocalGlass.current) GlassBackdrop()
+        val glass = LocalGlass.current
+        val source = rememberGraphicsLayer()
+        Box(
+            Modifier.fillMaxSize().then(
+                if (glass) Modifier.drawWithContent {
+                    // Kaydırılan içerik kaydedilir; alt çubuk bunun bulanık kopyasını gösterir
+                    source.record { this@drawWithContent.drawContent() }
+                    drawLayer(source)
+                } else Modifier
+            )
+        ) {
+        if (glass) GlassBackdrop()
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HomeHeader(
                 s, tab, searching, query, { query = it },
@@ -171,6 +185,7 @@ fun App(s: AppState) {
                 }
             }
         }
+        }
 
         if (tab < 2) {
             IconBox(
@@ -180,14 +195,16 @@ fun App(s: AppState) {
             )
         }
 
-        FlatBottomNav(
-            items = tabs,
-            selected = tab,
-            onSelect = { tab = it },
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .widthIn(max = 420.dp).fillMaxWidth().height(64.dp)
-        )
+        CompositionLocalProvider(LocalGlassSource provides (if (glass) source else null)) {
+            FlatBottomNav(
+                items = tabs,
+                selected = tab,
+                onSelect = { tab = it },
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .widthIn(max = 420.dp).fillMaxWidth().height(64.dp)
+            )
+        }
 
         if (showSettings) SettingsPage(s) { showSettings = false }
         if (showDevice) DevicePage { showDevice = false }
@@ -468,16 +485,10 @@ private fun ActionTile(icon: ImageVector, label: String, modifier: Modifier, onC
     val cs = MaterialTheme.colorScheme
     Row(
         modifier.fillMaxWidth().flatClick(onClick = onClick)
-            .glassTinted(RoundedCornerShape(20.dp), Color(0xFF3558FF), cs.surfaceContainerHigh).padding(horizontal = 14.dp),
+            .glassSurface(RoundedCornerShape(20.dp), cs.surfaceContainerHigh).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (LocalGlass.current) {
-            Box(Modifier.size(30.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.28f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, Modifier.size(17.dp), tint = cs.primary)
-            }
-        } else {
-            Icon(icon, null, Modifier.size(20.dp), tint = cs.primary)
-        }
+        Icon(icon, null, Modifier.size(20.dp), tint = cs.primary)
         Spacer(Modifier.width(8.dp))
         Text(label, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
@@ -508,7 +519,7 @@ private fun RecentStrip(s: AppState) {
             items(recent, key = { it.pkg }) { g ->
                 Row(
                     Modifier.flatClick { s.launch(g.pkg) }
-                        .glassTinted(RoundedCornerShape(22.dp), Color(0xFF7B4DFF), cs.surfaceContainer).padding(8.dp),
+                        .glassSurface(RoundedCornerShape(22.dp), cs.surfaceContainer).padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Cover(g, Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)), 0.85f)

@@ -232,7 +232,7 @@ fun FlatBottomNav(
     val cs = MaterialTheme.colorScheme
     val glass = LocalGlass.current
     Row(
-        modifier.glassSurface(RoundedCornerShape(28.dp), cs.surfaceContainerHigh).padding(6.dp),
+        modifier.glassBackdropBlur(RoundedCornerShape(28.dp)).glassSurface(RoundedCornerShape(28.dp), cs.surfaceContainerHigh).padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -246,7 +246,7 @@ fun FlatBottomNav(
             val iconPop by animateFloatAsState(if (sel) 1.15f else 1f, spring(dampingRatio = 0.35f, stiffness = 300f), label = "navPop")
             Row(
                 Modifier.weight(w).fillMaxHeight().flatClick { onSelect(i) }
-                    .glassSurface(RoundedCornerShape(22.dp), bg),
+                    .clip(RoundedCornerShape(22.dp)).background(bg),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {

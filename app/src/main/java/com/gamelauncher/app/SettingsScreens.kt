@@ -178,13 +178,6 @@ fun SettingsPage(s: AppState, onClose: () -> Unit) {
                         .padding(horizontal = 16.dp).padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    FlatCard(pad = 16.dp) {
-                        ToggleRow(
-                            "Liquid Glass",
-                            "Buzlu cam görünümü: kartlar, düğmeler ve alt çubuk yarı saydam olur, arkada renkli ışıklar görünür. Koyu tema kullanır.",
-                            s.glass, { s.changeGlass(it) }
-                        )
-                    }
                     SettingsRow(Icons.Default.VerticalSplit, "Yan Panel", "Kenar paneli, FPS / sıcaklık göstergesi, uygulamalar") { sub = Sub.EDGE }
                     SettingsRow(Icons.Default.SystemUpdate, "Güncellemeler", "Sürüm ${Updater.current(LocalContext.current).name}") { sub = Sub.UPDATES }
                     SettingsRow(Icons.Default.Lock, "İzinler", if (s.hasUsage) "Kullanım erişimi verildi" else "Kullanım erişimi gerekli") { sub = Sub.PERMS }
