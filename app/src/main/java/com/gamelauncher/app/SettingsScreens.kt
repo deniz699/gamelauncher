@@ -79,6 +79,28 @@ fun AppearanceSheet(s: AppState, onClose: () -> Unit) {
                 )
             }
 
+            if (s.glass) {
+                val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                    if (uri != null) s.setBackground(uri)
+                }
+                SectionLabel("Arka plan")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SoftButton(
+                        "Resim / GIF / Video seç",
+                        { pick.launch(arrayOf("image/*", "video/*")) },
+                        Modifier.weight(1f), icon = Icons.Default.Image
+                    )
+                    if (s.bgPath != null) {
+                        SoftButton("Varsayılan", { s.clearBackground() })
+                    }
+                }
+                Text(
+                    "Seçtiğin görsel, GIF veya video tüm uygulamanın arkasında görünür; kartlar ve çubuklar buzlu cam olarak üstünde durur. Video sessiz oynar.",
+                    Modifier.padding(top = 8.dp),
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant
+                )
+            }
+
             if (!s.glass) {
                 SectionLabel("Tema")
                 SegmentedChoice(listOf("Sistem", "Açık", "Koyu", "AMOLED"), s.themeMode) { s.setTheme(it) }

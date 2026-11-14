@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -107,17 +108,10 @@ fun Modifier.glassTinted(shape: Shape, tint: Color, flat: Color = tint): Modifie
     }
 }
 
-/** Alt sayfalar (Ayarlar, İstatistik…): cam modunda arka plan renkli ışıklı, değilse düz Surface. */
+/** Alt sayfalar (Ayarlar, İstatistik…): cam modunda şeffaf (arka planı en üstteki tek katman verir), değilse düz Surface. */
 @Composable
 fun PageSurface(modifier: Modifier = Modifier, color: Color, content: @Composable () -> Unit) {
-    if (LocalGlass.current) {
-        Box(modifier) {
-            GlassBackdrop()
-            Surface(Modifier.fillMaxSize(), color = Color.Transparent, content = content)
-        }
-    } else {
-        Surface(modifier, color = color, content = content)
-    }
+    Surface(modifier, color = if (LocalGlass.current) Color.Transparent else color, content = content)
 }
 
 /**
@@ -156,24 +150,138 @@ fun Modifier.glassBackdropBlur(shape: Shape, radius: Float = 36f): Modifier = co
 }
 
 /**
- * Cam modunun arka planı: koyu lacivert zemin üstünde mercan, mor, mavi ve camgöbeği ışık lekeleri.
- * Küçük bir bitmap'e bir kez çizilip büyütülür; kaydırırken GPU'ya yük bindirmez.
+ * Cam modunun arka planı. Özel arka plan yoksa koyu zemin üstünde renkli ışık lekeleri (bir kez çizilip önbelleğe alınır);
+ * varsa seçilen resim / GIF / video ekranı kaplayacak şekilde gösterilir, üstüne okunurluk için hafif karartma gelir.
  */
 @Composable
-fun GlassBackdrop(modifier: Modifier = Modifier) {
+fun GlassBackdrop(path: String? = null, kind: String = "image", modifier: Modifier = Modifier) {
     val accent = MaterialTheme.colorScheme.primary
-    Box(
-        modifier.fillMaxSize().drawWithCache {
-            val w = (size.width / 4f).toInt().coerceAtLeast(2)
-            val h = (size.height / 4f).toInt().coerceAtLeast(2)
-            val bmp = ImageBitmap(w, h)
-            CanvasDrawScope().draw(this, layoutDirection, Canvas(bmp), Size(w.toFloat(), h.toFloat())) {
-                paintGlassBlobs(accent)
+    val file = remember(path) { path?.let { java.io.File(it) }?.takeIf { it.exists() } }
+    Box(modifier.fillMaxSize()) {
+        if (file == null) {
+            Box(
+                Modifier.fillMaxSize().drawWithCache {
+                    val w = (size.width / 4f).toInt().coerceAtLeast(2)
+                    val h = (size.height / 4f).toInt().coerceAtLeast(2)
+                    val bmp = ImageBitmap(w, h)
+                    CanvasDrawScope().draw(this, layoutDirection, Canvas(bmp), Size(w.toFloat(), h.toFloat())) {
+                        paintGlassBlobs(accent)
+                    }
+                    val dst = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
+                    onDrawBehind { drawImage(bmp, dstSize = dst, filterQuality = FilterQuality.Medium) }
+                }
+            )
+        } else {
+            Box(Modifier.fillMaxSize().background(Color(0xFF0B0A1E)))
+            when (kind) {
+                "video" -> VideoBackdrop(file)
+                "gif" -> GifBackdrop(file)
+                else -> ImageBackdrop(file)
             }
-            val dst = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
-            onDrawBehind { drawImage(bmp, dstSize = dst, filterQuality = FilterQuality.Medium) }
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.30f)))
         }
+    }
+}
+
+@Composable
+private fun ImageBackdrop(file: java.io.File) {
+    val bmp = remember(file.path) {
+        runCatching { android.graphics.BitmapFactory.decodeFile(file.path)?.asImageBitmap() }.getOrNull()
+    }
+    if (bmp != null) {
+        androidx.compose.foundation.Image(
+            bmp, null, Modifier.fillMaxSize(),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+        )
+    }
+}
+
+@Composable
+private fun GifBackdrop(file: java.io.File) {
+    val drawable = remember(file.path) {
+        runCatching<android.graphics.drawable.Drawable?> {
+            if (Build.VERSION.SDK_INT >= 28) {
+                android.graphics.ImageDecoder.decodeDrawable(android.graphics.ImageDecoder.createSource(file))
+            } else {
+                android.graphics.drawable.BitmapDrawable(null, android.graphics.BitmapFactory.decodeFile(file.path))
+            }
+        }.getOrNull()
+    }
+    if (drawable != null) {
+        androidx.compose.ui.viewinterop.AndroidView(
+            factory = { c ->
+                android.widget.ImageView(c).apply {
+                    scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                    setImageDrawable(drawable)
+                    if (Build.VERSION.SDK_INT >= 28 && drawable is android.graphics.drawable.AnimatedImageDrawable) {
+                        drawable.repeatCount = android.graphics.drawable.AnimatedImageDrawable.REPEAT_INFINITE
+                        drawable.start()
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+/** Sessiz, döngüde oynayan video; TextureView üzerinde ekranı kaplayacak (center-crop) şekilde. */
+@Composable
+private fun VideoBackdrop(file: java.io.File) {
+    val player = remember(file.path) { LoopingVideo(file.path) }
+    androidx.compose.runtime.DisposableEffect(player) { onDispose { player.release() } }
+    androidx.compose.ui.viewinterop.AndroidView(
+        factory = { c -> android.view.TextureView(c).apply { surfaceTextureListener = player.listener(this) } },
+        modifier = Modifier.fillMaxSize()
     )
+}
+
+private class LoopingVideo(private val path: String) {
+    private var mp: android.media.MediaPlayer? = null
+
+    fun listener(tv: android.view.TextureView) = object : android.view.TextureView.SurfaceTextureListener {
+        override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+            release()
+            val m = android.media.MediaPlayer()
+            runCatching {
+                m.setDataSource(path)
+                m.setSurface(android.view.Surface(st))
+                m.isLooping = true
+                m.setVolume(0f, 0f)
+                m.setOnVideoSizeChangedListener { _, vw, vh -> crop(tv, vw, vh) }
+                m.setOnPreparedListener { it.start() }
+                m.prepareAsync()
+                mp = m
+            }.onFailure { runCatching { m.release() } }
+        }
+
+        override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+            mp?.let { crop(tv, it.videoWidth, it.videoHeight) }
+        }
+
+        override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture): Boolean {
+            release()
+            return true
+        }
+
+        override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
+    }
+
+    private fun crop(tv: android.view.TextureView, vw: Int, vh: Int) {
+        val w = tv.width.toFloat()
+        val h = tv.height.toFloat()
+        if (vw <= 0 || vh <= 0 || w <= 0f || h <= 0f) return
+        val scale = maxOf(w / vw, h / vh)
+        val m = android.graphics.Matrix()
+        m.setScale(vw * scale / w, vh * scale / h, w / 2f, h / 2f)
+        tv.setTransform(m)
+    }
+
+    fun release() {
+        val m = mp ?: return
+        mp = null
+        runCatching { m.stop() }
+        runCatching { m.release() }
+    }
 }
 
 private fun DrawScope.paintGlassBlobs(accent: Color) {

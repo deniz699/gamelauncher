@@ -142,11 +142,14 @@ fun App(s: AppState) {
             g.name.contains(query.trim(), ignoreCase = true)
     }
 
-    Box(Modifier.fillMaxSize().background(cs.background)) {
-        val glass = LocalGlass.current
+    val glass = LocalGlass.current
+    // Cam modunda arka plan (renk/resim/video) en üstteki tek katmandan gelir; sayfalar açıkken ana ekranı gizle
+    val pageOpen = showSettings || showDevice || showPerf || showKit || showNet || statsGame != null
+    val hideHome = glass && pageOpen
+    Box(Modifier.fillMaxSize().then(if (glass) Modifier else Modifier.background(cs.background))) {
         val source = rememberGraphicsLayer()
         Box(
-            Modifier.fillMaxSize().then(
+            Modifier.fillMaxSize().graphicsLayer { alpha = if (hideHome) 0f else 1f }.then(
                 if (glass) Modifier.drawWithContent {
                     // Kaydırılan içerik kaydedilir; alt çubuk bunun bulanık kopyasını gösterir
                     source.record { this@drawWithContent.drawContent() }
@@ -154,7 +157,6 @@ fun App(s: AppState) {
                 } else Modifier
             )
         ) {
-        if (glass) GlassBackdrop()
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             HomeHeader(
                 s, tab, searching, query, { query = it },
@@ -187,7 +189,7 @@ fun App(s: AppState) {
         }
         }
 
-        if (tab < 2) {
+        if (tab < 2 && !hideHome) {
             IconBox(
                 Icons.Default.Add, "Oyun ekle", { showAdd = true },
                 Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = 88.dp),
@@ -195,7 +197,7 @@ fun App(s: AppState) {
             )
         }
 
-        CompositionLocalProvider(LocalGlassSource provides (if (glass) source else null)) {
+        if (!hideHome) CompositionLocalProvider(LocalGlassSource provides (if (glass) source else null)) {
             FlatBottomNav(
                 items = tabs,
                 selected = tab,

@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
 
 class MainActivity : ComponentActivity() {
     private lateinit var state: AppState
@@ -19,7 +20,12 @@ class MainActivity : ComponentActivity() {
         }
         state = AppState(applicationContext)
         setContent {
-            LauncherTheme(state.themeMode, state.accent, state.dynamic, state.fontStep, state.glass) { App(state) }
+            LauncherTheme(state.themeMode, state.accent, state.dynamic, state.fontStep, state.glass) {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                    if (state.glass) GlassBackdrop(state.bgPath, state.bgKind)
+                    App(state)
+                }
+            }
         }
     }
 

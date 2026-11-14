@@ -114,7 +114,7 @@ private fun glassScheme(a: Color): ColorScheme {
     val onA = if (a.luminance() > 0.45f) Color(0xFF111111) else Color.White
     return darkColorScheme(
         primary = a, onPrimary = onA,
-        primaryContainer = a.copy(alpha = 0.32f), onPrimaryContainer = lerp(a, Color.White, 0.75f),
+        primaryContainer = w(0.16f), onPrimaryContainer = lerp(a, Color.White, 0.35f),
         secondary = a, onSecondary = onA,
         secondaryContainer = w(0.16f), onSecondaryContainer = Color.White,
         tertiary = a, onTertiary = onA,

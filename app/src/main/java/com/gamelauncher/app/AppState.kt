@@ -48,6 +48,7 @@ class AppState(private val ctx: Context) {
     var dynamic by mutableStateOf(prefs.getBoolean("dynamic", false))
     var edge by mutableStateOf(prefs.getBoolean("edge", false))
     var bgPath by mutableStateOf(prefs.getString("bg", null))
+    var bgKind by mutableStateOf(prefs.getString("bgkind", "image") ?: "image") // image | gif | video
     var bgBlur by mutableStateOf(prefs.getBoolean("bgblur", false))
     var sort by mutableStateOf(
         runCatching { SortMode.valueOf(prefs.getString("sort", "MANUAL")!!) }.getOrDefault(SortMode.MANUAL)
@@ -250,28 +251,52 @@ class AppState(private val ctx: Context) {
 
     fun changeBgBlur(v: Boolean) { bgBlur = v; prefs.edit().putBoolean("bgblur", v).apply() }
 
-    /** Galeriden seçilen görseli uygulama duvar kağıdı yapar. */
+    /** Galeriden seçilen resim / GIF / videoyu Liquid Glass arka planı yapar (kopyalanarak saklanır). */
     fun setBackground(uri: Uri) {
-        runCatching {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            var sample = 1
-            while (bounds.outHeight / sample > 2400) sample *= 2
-            val bmp = ctx.contentResolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
-            } ?: return
-            val f = File(ctx.filesDir, "bg_${System.currentTimeMillis()}.jpg")
-            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
-            bgPath?.let { File(it).delete() }
-            bgPath = f.absolutePath
-            prefs.edit().putString("bg", bgPath).apply()
+        val mime = ctx.contentResolver.getType(uri) ?: ""
+        pool.execute {
+            val res: Pair<String, String>? = runCatching {
+                when {
+                    mime.startsWith("video/") -> copyBg(uri, "mp4") to "video"
+                    mime == "image/gif" -> copyBg(uri, "gif") to "gif"
+                    else -> decodeBgImage(uri)?.let { it to "image" }
+                }
+            }.getOrNull()
+            mainHandler.post {
+                if (res != null) {
+                    val old = bgPath
+                    bgPath = res.first
+                    bgKind = res.second
+                    prefs.edit().putString("bg", res.first).putString("bgkind", res.second).apply()
+                    old?.let { File(it).delete() }
+                }
+            }
         }
+    }
+
+    private fun copyBg(uri: Uri, ext: String): String {
+        val f = File(ctx.filesDir, "bg_${System.currentTimeMillis()}.$ext")
+        ctx.contentResolver.openInputStream(uri)!!.use { i -> f.outputStream().use { o -> i.copyTo(o) } }
+        return f.absolutePath
+    }
+
+    private fun decodeBgImage(uri: Uri): String? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (bounds.outHeight / sample > 2400) sample *= 2
+        val bmp = ctx.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+        } ?: return null
+        val f = File(ctx.filesDir, "bg_${System.currentTimeMillis()}.jpg")
+        f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+        return f.absolutePath
     }
 
     fun clearBackground() {
         bgPath?.let { File(it).delete() }
         bgPath = null
-        prefs.edit().remove("bg").apply()
+        prefs.edit().remove("bg").remove("bgkind").apply()
     }
 
     private fun mergeSessions(newS: List<Session>) {
