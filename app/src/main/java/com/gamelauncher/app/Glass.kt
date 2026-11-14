@@ -136,7 +136,7 @@ fun Modifier.glassBackdropBlur(shape: Shape, radius: Float = 36f): Modifier = co
     if (!LocalGlass.current || src == null || Build.VERSION.SDK_INT < 31) {
         Modifier
     } else {
-        val layer = androidx.compose.ui.graphics.layer.rememberGraphicsLayer()
+        val layer = androidx.compose.ui.graphics.rememberGraphicsLayer()
         var pos by remember { mutableStateOf(Offset.Zero) }
         Modifier
             .onGloballyPositioned { pos = it.positionInRoot() }
