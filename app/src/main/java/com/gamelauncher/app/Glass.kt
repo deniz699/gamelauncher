@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 
@@ -228,18 +229,37 @@ fun GlassBackdrop(
     val accent = MaterialTheme.colorScheme.primary
     val file = remember(path) { path?.let { java.io.File(it) }?.takeIf { it.exists() } }
     val raw = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    // Resim arka planlarda bulanıklık RenderEffect'e bağlı olmasın diye resmin küçültülmüş (kendiliğinden bulanık) kopyası kullanılır
+    val small = remember(file?.path, kind) { if (file != null && kind == "image") makeBlurBitmap(file) else null }
     Box(
         modifier.fillMaxSize().then(
             if (blurLayer == null) Modifier else Modifier.drawWithContent {
-                // Arka plan bir katmana kaydedilir; ekrana normal çizilir, ayrıca bulanık kopyası kartlar için hazırlanır
                 val sz = IntSize(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
                 raw.record(this, layoutDirection, sz) { this@drawWithContent.drawContent() }
-                blurLayer.renderEffect =
-                    if (Build.VERSION.SDK_INT >= 31) {
-                        val r = 22.dp.toPx()
-                        BlurEffect(r, r, TileMode.Clamp)
-                    } else null
-                blurLayer.record(this, layoutDirection, sz) { drawLayer(raw) }
+                if (small != null) {
+                    blurLayer.renderEffect = null
+                    blurLayer.record(this, layoutDirection, sz) {
+                        drawRect(Color(0xFF0B0A1E))
+                        // ContentScale.Crop ile aynı yerleşim
+                        val sc = maxOf(sz.width / small.width.toFloat(), sz.height / small.height.toFloat())
+                        val dw = (small.width * sc).toInt()
+                        val dh = (small.height * sc).toInt()
+                        drawImage(
+                            small,
+                            dstOffset = IntOffset((sz.width - dw) / 2, (sz.height - dh) / 2),
+                            dstSize = IntSize(dw, dh),
+                            filterQuality = FilterQuality.High
+                        )
+                        drawRect(Color.Black.copy(alpha = 0.30f))
+                    }
+                } else {
+                    blurLayer.renderEffect =
+                        if (Build.VERSION.SDK_INT >= 31) {
+                            val r = 22.dp.toPx()
+                            BlurEffect(r, r, TileMode.Clamp)
+                        } else null
+                    blurLayer.record(this, layoutDirection, sz) { drawLayer(raw) }
+                }
                 drawLayer(raw)
             }
         )
@@ -268,6 +288,18 @@ fun GlassBackdrop(
         }
     }
 }
+
+/** Resmi çok küçültüp (yaklaşık 1/16) yumuşak bir kopya üretir; büyütülünce güçlü bir bulanıklık gibi görünür. */
+private fun makeBlurBitmap(file: java.io.File): ImageBitmap? = runCatching {
+    val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
+    var b = android.graphics.BitmapFactory.decodeFile(file.path, opts) ?: return@runCatching null
+    while (b.width > 64 && b.height > 64) {
+        val n = android.graphics.Bitmap.createScaledBitmap(b, b.width / 2, b.height / 2, true)
+        if (n !== b) b.recycle()
+        b = n
+    }
+    b.asImageBitmap()
+}.getOrNull()
 
 @Composable
 private fun ImageBackdrop(file: java.io.File) {
